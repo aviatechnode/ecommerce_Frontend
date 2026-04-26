@@ -1,26 +1,25 @@
 import axios from "axios";
+import { getCsrfToken } from "../lib/csrf";
+
+
+
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 export const api = axios.create({
-  baseURL: "http://localhost:8080",
+  baseURL: API_BASE_URL,
   withCredentials: true,
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
-let csrfToken: string | null = null;
-
-// Fetch CSRF token
-export const initCSRF = async () => {
-  try {
-    const res = await api.get("/api/csrf-token");
-    csrfToken = res.data.csrfToken;
-  } catch (err) {
-    console.error("Failed to fetch CSRF token", err);
-  }
-};
-
-// Attach CSRF automatically
+// attach CSRF before every request
 api.interceptors.request.use((config) => {
-if (csrfToken && config.method?.toLowerCase() !== "get") {
-    config.headers["x-csrf-token"] = csrfToken;
+  const token = getCsrfToken();
+
+  if (token) {
+    config.headers["x-csrf-token"] = token;
   }
+
   return config;
 });

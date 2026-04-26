@@ -13,28 +13,30 @@ export default function RoleProtectedRoute({
   allowedRoles,
   requiredPermissions,
 }: Props) {
-  const { user, loading, hasPermission } = useAuthStore();
+  const { user, hydrated, hasPermission } = useAuthStore();
 
-  if (loading) return null;
+  // 🔥 wait until auth state is fully resolved
+  if (!hydrated) return null;
 
+  // 🔥 only redirect AFTER hydration completes
   if (!user) {
     return <Navigate to="/auth" replace />;
   }
 
-  // 🔹 Role check
-  if (
-    allowedRoles &&
-    !allowedRoles.includes(user.roleName)
-  ) {
+  // 🔥 super admin override (clean + reliable)
+  if (user.isSuperAdmin) {
+    return children;
+  }
+
+  // 🔥 role check
+  if (allowedRoles && !allowedRoles.includes(user.roleName)) {
     return <Navigate to="/unauthorized" replace />;
   }
 
-  // 🔹 Permission check
+  // 🔥 permission check
   if (
     requiredPermissions &&
-    !requiredPermissions.every((p) =>
-      hasPermission(p)
-    )
+    !requiredPermissions.every((p) => hasPermission(p))
   ) {
     return <Navigate to="/unauthorized" replace />;
   }

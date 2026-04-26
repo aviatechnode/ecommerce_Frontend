@@ -5,19 +5,46 @@ import { useAuthStore } from "../store/AuthStore";
 export default function GoogleCallback() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { loginWithGoogle } = useAuthStore();
+  const { signinWithGoogle } = useAuthStore();
 
   useEffect(() => {
-    const token = params.get("token");
+    const run = async () => {
+      const token = params.get("token");
 
-    if (token) {
-      loginWithGoogle(token)
-        .then(() => navigate("/", { replace: true }))
-        .catch(() => navigate("/auth", { replace: true }));
-    } else {
-      navigate("/auth", { replace: true });
-    }
-  }, [params, navigate, loginWithGoogle]);
+      if (!token) {
+        navigate("/auth", { replace: true });
+        return;
+      }
 
-  return <div className="text-center mt-20">Signing you in with Google...</div>;
+      try {
+        await signinWithGoogle(token);
+
+        // ✅ Get updated user AFTER login
+        const user = useAuthStore.getState().user;
+
+        if (!user) {
+          navigate("/auth", { replace: true });
+          return;
+        }
+
+        // ✅ Redirect based on role
+        if (user.roleName === "ADMIN" || user.roleName === "SUPER_ADMIN") {
+          navigate("/admin", { replace: true });
+        } else {
+          navigate("/", { replace: true });
+        }
+      } catch (err) {
+        console.error("Google callback error:", err);
+        navigate("/auth", { replace: true });
+      }
+    };
+
+    run();
+  }, [params, navigate, signinWithGoogle]);
+
+  return (
+    <div className="text-center mt-20">
+      Signing you in with Google...
+    </div>
+  );
 }

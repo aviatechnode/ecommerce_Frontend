@@ -9,6 +9,9 @@ export default function PermissionGate({
 }) {
   const { hasPermission } = useAuthStore();
 
+  // 🔹 SUPER_ADMIN shortcut
+  if (hasPermission("*")) return <>{children}</>;
+
   if (!hasPermission(permission)) return null;
 
   return <>{children}</>;

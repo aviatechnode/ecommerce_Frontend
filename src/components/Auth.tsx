@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import AuthForm from "../components/AuthForm";
-import AuthSuccess from "../components/AuthSuccess"; // ✅ NEW
+import AuthSuccess from "../components/AuthSuccess";
 import { useAuthStore } from "../store/AuthStore";
 
 type Mode = "form" | "verify" | "loginSuccess";
 
 export default function Auth() {
-  const { signin, signup } = useAuthStore();
+  const { signin, signup, user } = useAuthStore();
   const navigate = useNavigate();
 
   const [isSignUp, setIsSignUp] = useState(false);
@@ -15,6 +15,12 @@ export default function Auth() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user && mode === "form") {
+      navigate("/", { replace: true });
+    }
+  }, [user, navigate, mode]);
 
   const handleSubmit = async (data: {
     name?: string;
@@ -27,25 +33,30 @@ export default function Auth() {
     try {
       if (isSignUp) {
         await signup(data.name as string, data.email, data.password);
-
-        // ✅ Switch to verification screen
         setMode("verify");
-
       } else {
         await signin(data.email, data.password);
 
-        // ✅ Show success screen
         setMode("loginSuccess");
 
+        const currentUser = useAuthStore.getState().user;
+
         setTimeout(() => {
-          navigate("/");
-        }, 1500);
+          if (
+            currentUser?.roleName === "ADMIN" ||
+            currentUser?.roleName === "SUPER_ADMIN"
+          ) {
+            navigate("/admin", { replace: true });
+          } else {
+            navigate("/", { replace: true });
+          }
+        }, 1200);
       }
     } catch (err: any) {
       setError(
-        err.response?.data?.message ||
-        err.message ||
-        "An unexpected error occurred."
+        err?.response?.data?.message ||
+          err?.message ||
+          "Something went wrong."
       );
     } finally {
       setLoading(false);
@@ -53,13 +64,11 @@ export default function Auth() {
   };
 
   const handleGoogleSignIn = () => {
-    window.location.href = "http://localhost:8080/api/auth/google";
+    window.location.href = `http://localhost:8080/api/auth/google`;
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-4 bg-gray-100 text-black">
-      
-      {/* ✅ FORM */}
+    <div className="flex items-start justify-center min-h-screen px-4 pt-8 bg-gray-50 text-black">
       {mode === "form" && (
         <AuthForm
           isSignUp={isSignUp}
@@ -72,11 +81,10 @@ export default function Auth() {
         />
       )}
 
-      {/* ✅ EMAIL VERIFICATION SCREEN */}
       {mode === "verify" && (
         <AuthSuccess
           title="Verify Your Email"
-          message="Your account has been created successfully. A verification link has been sent to your email. Please check your inbox and verify your account before logging in."
+          message="Check your inbox to verify your account."
           actionText="Back to Sign In"
           onAction={() => {
             setIsSignUp(false);
@@ -85,11 +93,10 @@ export default function Auth() {
         />
       )}
 
-      {/* ✅ LOGIN SUCCESS SCREEN */}
       {mode === "loginSuccess" && (
         <AuthSuccess
-          title="Welcome Back!"
-          message="Login successful. Redirecting to dashboard..."
+          title="Welcome Back"
+          message="Redirecting..."
         />
       )}
     </div>
