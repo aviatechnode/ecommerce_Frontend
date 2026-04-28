@@ -1,0 +1,157 @@
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { api } from "../../api/axios";
+
+/* =========================================================
+TYPES
+========================================================= */
+
+export interface Product {
+  id: string;
+  name: string;
+  price?: number;
+  medias?: { url: string }[];
+}
+
+export interface WishlistItem {
+  id: string;
+  productId: string;
+  product: Product;
+}
+
+export interface Wishlist {
+  id: string;
+  items: WishlistItem[];
+}
+
+interface WishlistState {
+  wishlist: Wishlist | null;
+  loading: boolean;
+  error: string | null;
+}
+
+/* =========================================================
+INITIAL STATE
+========================================================= */
+
+const initialState: WishlistState = {
+  wishlist: null,
+  loading: false,
+  error: null,
+};
+
+/* =========================================================
+THUNKS (API CALLS)
+========================================================= */
+
+/* GET WISHLIST */
+export const fetchWishlist = createAsyncThunk(
+  "wishlist/fetch",
+  async (_, { rejectWithValue }) => {
+    try {
+      const res = await api.get("/wishlist");
+      return res.data.wishlist;
+    } catch (err: any) {
+      return rejectWithValue(
+        err?.response?.data?.message || "Failed to load wishlist"
+      );
+    }
+  }
+);
+
+/* ADD TO WISHLIST */
+export const addToWishlist = createAsyncThunk(
+  "wishlist/add",
+  async (productId: string, { rejectWithValue }) => {
+    try {
+      const res = await api.post("/wishlist", { productId });
+      return res.data.item;
+    } catch (err: any) {
+      return rejectWithValue(
+        err?.response?.data?.message || "Failed to add to wishlist"
+      );
+    }
+  }
+);
+
+/* REMOVE ITEM */
+export const removeWishlistItem = createAsyncThunk(
+  "wishlist/remove",
+  async (id: string, { rejectWithValue }) => {
+    try {
+      await api.delete(`/wishlist/${id}`);
+      return id;
+    } catch (err: any) {
+      return rejectWithValue(
+        err?.response?.data?.message || "Failed to remove item"
+      );
+    }
+  }
+);
+
+/* CLEAR WISHLIST */
+export const clearWishlist = createAsyncThunk(
+  "wishlist/clear",
+  async (_, { rejectWithValue }) => {
+    try {
+      await api.delete("/wishlist");
+      return true;
+    } catch (err: any) {
+      return rejectWithValue(
+        err?.response?.data?.message || "Failed to clear wishlist"
+      );
+    }
+  }
+);
+
+/* =========================================================
+SLICE
+========================================================= */
+
+const wishlistSlice = createSlice({
+  name: "wishlist",
+  initialState,
+  reducers: {},
+
+  extraReducers: (builder) => {
+    builder
+
+      /* ================= FETCH ================= */
+      .addCase(fetchWishlist.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchWishlist.fulfilled, (state, action) => {
+        state.loading = false;
+        state.wishlist = action.payload;
+      })
+      .addCase(fetchWishlist.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+
+      /* ================= ADD ================= */
+      .addCase(addToWishlist.fulfilled, (state, action) => {
+        if (!state.wishlist) {
+          state.wishlist = { id: "", items: [] };
+        }
+
+        state.wishlist.items.push(action.payload);
+      })
+
+      /* ================= REMOVE ================= */
+      .addCase(removeWishlistItem.fulfilled, (state, action) => {
+        if (!state.wishlist) return;
+
+        state.wishlist.items = state.wishlist.items.filter(
+          (item) => item.id !== action.payload
+        );
+      })
+
+      /* ================= CLEAR ================= */
+      .addCase(clearWishlist.fulfilled, (state) => {
+        if (!state.wishlist) return;
+        state.wishlist.items = [];
+      });
+  },
+});
+
+export default wishlistSlice.reducer;

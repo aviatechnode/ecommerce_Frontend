@@ -1,20 +1,29 @@
-// src/api/product.api.ts
 import { api } from "../api/axios";
 
 export const productApi = {
+  /* ================= GET ================= */
   getProducts: () => api.get("/api/products"),
-  getProduct: (id: string) => api.get(`/api/products/${id}`),
 
-  createProduct: (formData: FormData) =>
-    api.post("/api/products", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
+  getProduct: (id: string) =>
+    api.get(`/api/products/${id}`),
+
+  /* ================= CREATE ================= */
+  createProduct: (data: any) =>
+    api.post("/api/products", data, {
+      headers: {
+        "Content-Type": "application/json",
+      },
     }),
 
-  updateProduct: (id: string, formData: FormData) =>
-    api.put(`/api/products/${id}`, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
+  /* ================= UPDATE ================= */
+  updateProduct: (id: string, data: any) =>
+    api.put(`/api/products/${id}`, data, {
+      headers: {
+        "Content-Type": "application/json",
+      },
     }),
 
+  /* ================= DELETE ================= */
   deleteProduct: (id: string) =>
     api.delete(`/api/products/${id}`),
 };

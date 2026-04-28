@@ -1,76 +1,106 @@
 import { create } from "zustand";
 
-/* ================= TYPES ================= */
+//////////////////////////////////////////////////////////
+// TYPES
+//////////////////////////////////////////////////////////
 
-type Variant = {
+export type Variant = {
   id: string;
+
   name: string;
   sku: string;
-  price: string;
-  costPrice?: string;
+
+  price: number;
+  costPrice?: number;
+  compareAtPrice?: number;
 
   weight?: number;
   length?: number;
   width?: number;
   height?: number;
 
+  barcode?: string;
+  isActive?: boolean;
+
   attributes: {
-    attributeId: string;
     valueId: string;
   }[];
 
   inventories: {
     warehouseId: string;
-    stock: string;
-    threshold?: string;
+    stock: number;
+    reserved?: number;
+    threshold?: number;
   }[];
 };
 
-type Specification = {
+export type Specification = {
   name: string;
   value: string;
 };
 
-type Fitment = {
+export type Fitment = {
   trimId: string;
   notes?: string;
 };
 
-/* ================= STORE ================= */
+export type Media = {
+  url: string;
+  type: "IMAGE" | "VIDEO";
+  position?: number;
+};
+
+export type OEMNumber = {
+  oemNumber: string;
+};
+
+//////////////////////////////////////////////////////////
+// STORE INTERFACE
+//////////////////////////////////////////////////////////
 
 interface Store {
   step: number;
 
   product: {
     name: string;
-    description: string;
+    description?: string;
+
     brandId: string;
     categoryId: string;
-    oemNumber?: string;
 
-    isActive: boolean; // ✅ FIXED (missing before)
+    isActive: boolean;
+    isFeatured: boolean;
+
+    searchKeywords?: string;
   };
 
   variants: Variant[];
   specifications: Specification[];
   fitments: Fitment[];
-  images: File[];
+  medias: Media[];
+  oemNumbers: OEMNumber[];
 
-  /* ACTIONS */
-  setProduct: (field: keyof Store["product"], value: any) => void;
+  setProduct: <K extends keyof Store["product"]>(
+    field: K,
+    value: Store["product"][K]
+  ) => void;
 
-  addVariant: () => void;
-  updateVariant: (id: string, field: string, value: any) => void;
+  addVariant: (payload?: Partial<Variant>) => void;
+  updateVariant: (id: string, field: keyof Variant, value: any) => void;
   removeVariant: (id: string) => void;
 
   addSpec: () => void;
-  updateSpec: (index: number, field: string, value: string) => void;
+  updateSpec: (index: number, field: keyof Specification, value: string) => void;
   removeSpec: (index: number) => void;
 
   addFitment: (fitment: Fitment) => void;
   removeFitment: (index: number) => void;
 
-  setImages: (files: File[]) => void;
+  addOEMNumber: () => void;
+  updateOEMNumber: (index: number, value: string) => void;
+  removeOEMNumber: (index: number) => void;
+
+  setMedias: (files: Media[]) => void;
 
   nextStep: () => void;
   prevStep: () => void;
@@ -78,24 +108,35 @@ interface Store {
   reset: () => void;
 }
 
-/* ================= STORE IMPLEMENTATION ================= */
+//////////////////////////////////////////////////////////
+// STORE IMPLEMENTATION
+//////////////////////////////////////////////////////////
 
 export const useProductBuilder = create<Store>((set) => ({
   step: 1,
 
   product: {
     name: "",
-    description: "",
+    description: undefined,
+
     brandId: "",
     categoryId: "",
-    oemNumber: "",
-    isActive: true, // ✅ FIXED DEFAULT
+
+    isActive: true,
+    isFeatured: false,
+
+    searchKeywords: undefined,
   },
 
   variants: [],
   specifications: [],
   fitments: [],
-  images: [],
+  medias: [],
+  oemNumbers: [],
+
+  //////////////////////////////////////////////////////////
+  // PRODUCT
+  //////////////////////////////////////////////////////////
 
   setProduct: (field, value) =>
     set((state) => ({
@@ -105,20 +146,35 @@ export const useProductBuilder = create<Store>((set) => ({
       },
     })),
 
+  //////////////////////////////////////////////////////////
+  // VARIANTS
+  //////////////////////////////////////////////////////////
+
   addVariant: () =>
     set((state) => ({
       variants: [
         ...state.variants,
         {
-          id: crypto.randomUUID(),
+          id:
+            typeof crypto !== "undefined"
+              ? crypto.randomUUID()
+              : String(Date.now()),
+
           name: "",
           sku: "",
-          price: "",
-          costPrice: "",
+
+          price: 0,
+          costPrice: undefined,
+          compareAtPrice: undefined,
+
           weight: undefined,
           length: undefined,
           width: undefined,
           height: undefined,
+
+          barcode: undefined,
+          isActive: true,
+
           attributes: [],
           inventories: [],
         },
@@ -128,7 +184,24 @@ export const useProductBuilder = create<Store>((set) => ({
   updateVariant: (id, field, value) =>
     set((state) => ({
       variants: state.variants.map((v) =>
-        v.id === id ? { ...v, [field]: value } : v
+        v.id !== id
+          ? v
+          : {
+              ...v,
+              [field]:
+                typeof value === "string" &&
+                [
+                  "price",
+                  "costPrice",
+                  "compareAtPrice",
+                  "weight",
+                  "length",
+                  "width",
+                  "height",
+                ].includes(field as string)
+                  ? Number(value)
+                  : value,
+            }
       ),
     })),
 
@@ -136,6 +209,10 @@ export const useProductBuilder = create<Store>((set) => ({
     set((state) => ({
       variants: state.variants.filter((v) => v.id !== id),
     })),
+
+  //////////////////////////////////////////////////////////
+  // SPECIFICATIONS
+  //////////////////////////////////////////////////////////
 
   addSpec: () =>
     set((state) => ({
@@ -145,10 +222,14 @@ export const useProductBuilder = create<Store>((set) => ({
   updateSpec: (index, field, value) =>
     set((state) => {
       const specs = [...state.specifications];
+
+      if (!specs[index]) return state;
+
       specs[index] = {
         ...specs[index],
         [field]: value,
       };
+
       return { specifications: specs };
     }),
 
@@ -156,6 +237,10 @@ export const useProductBuilder = create<Store>((set) => ({
     set((state) => ({
       specifications: state.specifications.filter((_, i) => i !== index),
     })),
+
+  //////////////////////////////////////////////////////////
+  // FITMENTS
+  //////////////////////////////////////////////////////////
 
   addFitment: (fitment) =>
     set((state) => ({
@@ -167,25 +252,80 @@ export const useProductBuilder = create<Store>((set) => ({
       fitments: state.fitments.filter((_, i) => i !== index),
     })),
 
-  setImages: (files) => set({ images: files }),
+  //////////////////////////////////////////////////////////
+  // OEM NUMBERS
+  //////////////////////////////////////////////////////////
 
-  nextStep: () => set((state) => ({ step: state.step + 1 })),
-  prevStep: () => set((state) => ({ step: state.step - 1 })),
+  addOEMNumber: () =>
+    set((state) => ({
+      oemNumbers: [...state.oemNumbers, { oemNumber: "" }],
+    })),
+
+  updateOEMNumber: (index, value) =>
+    set((state) => {
+      const updated = [...state.oemNumbers];
+
+      if (!updated[index]) return state;
+
+      updated[index] = { oemNumber: value };
+
+      return { oemNumbers: updated };
+    }),
+
+  removeOEMNumber: (index) =>
+    set((state) => ({
+      oemNumbers: state.oemNumbers.filter((_, i) => i !== index),
+    })),
+
+  //////////////////////////////////////////////////////////
+  // MEDIA
+  //////////////////////////////////////////////////////////
+
+  setMedias: (files) =>
+    set({
+      medias: files.map((m, i) => ({
+        url: m.url,
+        type: m.type,
+        position: m.position ?? i,
+      })),
+    }),
+
+  //////////////////////////////////////////////////////////
+  // STEP CONTROL
+  //////////////////////////////////////////////////////////
+
+  nextStep: () =>
+    set((state) => ({
+      step: state.step + 1,
+    })),
+
+  prevStep: () =>
+    set((state) => ({
+      step: state.step - 1,
+    })),
+
+  //////////////////////////////////////////////////////////
+  // RESET
+  //////////////////////////////////////////////////////////
 
   reset: () =>
     set({
       step: 1,
+
       product: {
         name: "",
-        description: "",
+        description: undefined,
         brandId: "",
         categoryId: "",
-        oemNumber: "",
         isActive: true,
+        isFeatured: false,
+        searchKeywords: undefined,
       },
+
       variants: [],
       specifications: [],
       fitments: [],
-      images: [],
+      medias: [],
+      oemNumbers: [],
     }),
 }));

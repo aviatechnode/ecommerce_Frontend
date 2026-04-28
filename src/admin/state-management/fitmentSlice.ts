@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from 'axios';
+import { api } from '../../api/axios';
 
 interface FitmentState {
   fitments: any[];
@@ -13,36 +13,30 @@ const initialState: FitmentState = {
   error: null,
 };
 
-// Fetch fitments
-export const fetchFitments = createAsyncThunk('fitments/fetchFitments', async () => {
-  const response = await axios.get('/api/fitments');
-  return response.data;
-});
+// Fetch fitments by productId
+export const fetchFitments = createAsyncThunk(
+  'fitments/fetchFitments',
+  async (productId: string) => {
+    const response = await api.get(`/api/fitments`, { params: { productId } });
+    return response.data.data; // backend returns { success, data }
+  }
+);
 
-// Create fitment
+// Create fitment for a specific product
 export const createFitment = createAsyncThunk(
   'fitments/createFitment',
-  async (data: any) => {
-    const response = await axios.post('/api/fitments', data);
-    return response.data;
+  async ({ productId, trimId, notes }: { productId: string; trimId: string; notes?: string }) => {
+    const response = await api.post(`/api/fitments/${productId}`, { trimId, notes });
+    return response.data.data;
   }
 );
 
-// Update fitment
-export const updateFitment = createAsyncThunk(
-  'fitments/updateFitment',
-  async ({ id, data }: { id: string; data: any }) => {
-    const response = await axios.put(`/api/fitments/${id}`, data);
-    return response.data;
-  }
-);
-
-// Delete fitment
+// Delete fitment by ID
 export const deleteFitment = createAsyncThunk(
   'fitments/deleteFitment',
-  async (id: string) => {
-    await axios.delete(`/api/fitments/${id}`);
-    return id;
+  async (fitmentId: string) => {
+    const response = await api.delete(`/api/fitments/${fitmentId}`);
+    return response.data.data.id; // assuming backend returns deleted fitment object
   }
 );
 
@@ -54,6 +48,7 @@ const fitmentSlice = createSlice({
     builder
       .addCase(fetchFitments.pending, (state) => {
         state.loading = true;
+        state.error = null;
       })
       .addCase(fetchFitments.fulfilled, (state, action) => {
         state.loading = false;
@@ -65,12 +60,6 @@ const fitmentSlice = createSlice({
       })
       .addCase(createFitment.fulfilled, (state, action) => {
         state.fitments.push(action.payload);
-      })
-      .addCase(updateFitment.fulfilled, (state, action) => {
-        const index = state.fitments.findIndex((fitment) => fitment.id === action.payload.id);
-        if (index >= 0) {
-          state.fitments[index] = action.payload;
-        }
       })
       .addCase(deleteFitment.fulfilled, (state, action) => {
         state.fitments = state.fitments.filter((fitment) => fitment.id !== action.payload);

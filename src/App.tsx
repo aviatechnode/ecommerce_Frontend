@@ -24,7 +24,8 @@ import ClientLayout from "./client/layouts/ClientLayout";
 
 import { useAuthStore } from "./store/AuthStore";
 import ProductBuilder from "./admin/components/ProductBuilder";
-import AdminFitment from "./admin/components/AdminFitment";
+import AdminFitmentsWrapper from "./admin/payloads/AdminFitmentsWrapper";
+import Cart from "./client/pages/Cart";
 
 function App() {
   const initAuth = useAuthStore((s) => s.initAuth);
@@ -41,6 +42,7 @@ function App() {
     <Routes>
       <Route element={<ClientLayout />}>
         <Route path="/" element={<Home />} />
+        <Route path="/cart" element={<Cart />} />
       </Route>
 
       <Route path="/auth" element={<AuthPage />} />
@@ -59,7 +61,7 @@ function App() {
         <Route path="products" element={<ProductBuilder />} />
         <Route path="categories" element={<AdminCategories />} />
         <Route path="brands" element={<AdminBrands />} />
-        <Route path="fitments" element={<AdminFitment />} />
+        <Route path="/admin/fitments" element={<AdminFitmentsWrapper />} />
         <Route path="orders" element={<AdminOrders />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="roles" element={<AdminRoles />} />
