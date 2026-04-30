@@ -1,25 +1,18 @@
+export interface ProductMedia {
+  id?: string;
+  url: string;
+  type: "IMAGE" | "VIDEO";
+  position: number;
+}
+
 export interface Product {
   id: string;
   name: string;
-  slug: string;
-  description?: string | null;
-  brand: { id: string; name: string };
-  category: { id: string; name: string };
-  medias: { url: string }[];
-  variants: Variant[];
+  price?: number;
+  medias?: ProductMedia[];
 }
 
-export interface Variant {
+export interface WishlistItem {
   id: string;
-  name: string;
-  sku: string;
-  price: string;
-  inventories: Inventory[];
-}
-
-export interface Inventory {
-  stock: number;
-  warehouse: {
-    name: string;
-  };
+  product: Product;
 }

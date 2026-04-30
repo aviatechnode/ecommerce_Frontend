@@ -8,6 +8,13 @@ import warehouseReducer from "../state-management/warehouseSlice"
 import fitmentReducer from "../state-management/fitmentSlice"
 import cartReducer from "../state-management/cartSlice"
 import wishlistReducer from "../state-management/wishlistSlice"
+import reviewsReducer from "../state-management/reviewSlice"
+import addressReducer from "../state-management/address.slice"
+import checkoutReducer from "../state-management/checkoutSlice"
+import { useDispatch } from "react-redux";
+
+export const useAppDispatch: () => AppDispatch = useDispatch;
+
 export const store = configureStore({
   reducer: {
     roles: roleReducer,
@@ -18,6 +25,9 @@ export const store = configureStore({
     fitments: fitmentReducer,
     cart: cartReducer,
     wishlist: wishlistReducer,
+    reviews: reviewsReducer,
+    address: addressReducer,
+    checkout: checkoutReducer
   },
 });
 

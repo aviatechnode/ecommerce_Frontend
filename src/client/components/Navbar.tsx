@@ -21,6 +21,8 @@ import type { AppDispatch, RootState } from "../../admin/store/store";
 
 import { transformCategoriesToNavbar } from "../helpers/category-helper";
 import { fetchCategories } from "../../admin/state-management/categorySlice";
+import { useWishlistCountStore } from "../../admin/store/wishlistCountStore";
+import { useCartCountStore } from "../../admin/store/cartCountStore";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
@@ -62,6 +64,30 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Cart icon
+  const cartItems = useSelector(
+    (state: RootState) => state.cart.cart?.items
+  );
+
+  const syncCartFromItems = useCartCountStore((s) => s.syncFromItems);
+  const cartCount = useCartCountStore((s) => s.count);
+
+  useEffect(() => {
+    syncCartFromItems(cartItems?.length ?? 0);
+  }, [cartItems?.length, syncCartFromItems]);
+
+  // Wishlist
+  const wishlistItems = useSelector(
+    (state: RootState) => state.wishlist.wishlist?.items
+  );
+
+  const syncFromItems = useWishlistCountStore((s) => s.syncFromItems);
+  const count = useWishlistCountStore((s) => s.count);
+
+  useEffect(() => {
+    syncFromItems(wishlistItems?.length ?? 0);
+  }, [wishlistItems?.length, syncFromItems]);
+
   const handleAccountClick = async (action: string) => {
     setAccountOpen(false);
 
@@ -90,14 +116,31 @@ const Navbar = () => {
     }
   };
 
+  // Logo click handler
+  const handleLogoClick = () => {
+    navigate("/");
+  };
+
+  // Navigation helper for icons (also closes mobile menu if open)
+  const handleIconNavigation = (path: string) => {
+    setOpen(false); // close mobile menu on navigation
+    navigate(path);
+  };
+
   return (
     <nav className="w-full sticky top-0 z-50">
       {/* ================= TOP BAR ================= */}
       <div className="bg-green-600 text-white">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center h-16 gap-4">
-
-            <div className="flex items-center gap-2 min-w-fit">
+            {/* Logo - Clickable */}
+            <div
+              onClick={handleLogoClick}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === "Enter" && handleLogoClick()}
+              className="flex items-center gap-2 min-w-fit cursor-pointer"
+            >
               <img
                 src="/mograce_auto_parts_cropped.avif"
                 width={36}
@@ -122,8 +165,25 @@ const Navbar = () => {
             </div>
 
             <div className="hidden md:flex items-center gap-5 min-w-fit">
-              <Car size={20} className="cursor-pointer" />
-              <Heart size={20} className="cursor-pointer" />
+              {/* Car Icon - Navigates to home */}
+              <Car
+                size={20}
+                className="cursor-pointer hover:opacity-80 transition"
+                onClick={() => handleIconNavigation("/")}
+              />
+
+              {/* Wishlist Icon - Navigates to wishlist */}
+              <div
+                className="relative cursor-pointer hover:opacity-80 transition"
+                onClick={() => handleIconNavigation("/wishlist")}
+              >
+                <Heart size={20} />
+                {count > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-1.5 rounded-full">
+                    {count}
+                  </span>
+                )}
+              </div>
 
               {/* ACCOUNT */}
               <div className="relative" ref={accRef}>
@@ -153,38 +213,50 @@ const Navbar = () => {
                       </div>
 
                       <div className="py-1 text-sm">
-                        <button onClick={() => handleAccountClick("profile")}
-                          className="flex items-center gap-2 w-full px-4 py-2 hover:bg-gray-100">
+                        <button
+                          onClick={() => handleAccountClick("profile")}
+                          className="flex items-center gap-2 w-full px-4 py-2 hover:bg-gray-100"
+                        >
                           <User size={16} /> Profile
                         </button>
 
-                        <button onClick={() => handleAccountClick("orders")}
-                          className="flex items-center gap-2 w-full px-4 py-2 hover:bg-gray-100">
+                        <button
+                          onClick={() => handleAccountClick("orders")}
+                          className="flex items-center gap-2 w-full px-4 py-2 hover:bg-gray-100"
+                        >
                           <Package size={16} /> Orders
                         </button>
 
-                        <button onClick={() => handleAccountClick("settings")}
-                          className="flex items-center gap-2 w-full px-4 py-2 hover:bg-gray-100">
+                        <button
+                          onClick={() => handleAccountClick("settings")}
+                          className="flex items-center gap-2 w-full px-4 py-2 hover:bg-gray-100"
+                        >
                           <Settings size={16} /> Settings
                         </button>
 
                         <div className="border-t my-1" />
 
-                        <button onClick={() => handleAccountClick("logout")}
-                          className="flex items-center gap-2 w-full px-4 py-2 text-red-600 hover:bg-red-50">
+                        <button
+                          onClick={() => handleAccountClick("logout")}
+                          className="flex items-center gap-2 w-full px-4 py-2 text-red-600 hover:bg-red-50"
+                        >
                           <LogOut size={16} /> Logout
                         </button>
                       </div>
                     </>
                   ) : (
                     <div className="py-2 text-sm">
-                      <button onClick={() => handleAccountClick("signin")}
-                        className="w-full px-4 py-2 text-left hover:bg-gray-100">
+                      <button
+                        onClick={() => handleAccountClick("signin")}
+                        className="w-full px-4 py-2 text-left hover:bg-gray-100"
+                      >
                         Sign In
                       </button>
 
-                      <button onClick={() => handleAccountClick("signup")}
-                        className="w-full px-4 py-2 text-left hover:bg-gray-100">
+                      <button
+                        onClick={() => handleAccountClick("signup")}
+                        className="w-full px-4 py-2 text-left hover:bg-gray-100"
+                      >
                         Create Account
                       </button>
                     </div>
@@ -192,7 +264,18 @@ const Navbar = () => {
                 </div>
               </div>
 
-              <ShoppingCart size={22} className="cursor-pointer" />
+              {/* Cart Icon - Navigates to cart */}
+              <div
+                className="relative cursor-pointer hover:opacity-80 transition"
+                onClick={() => handleIconNavigation("/cart")}
+              >
+                <ShoppingCart size={22} />
+                {cartCount > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-1.5 rounded-full">
+                    {cartCount}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="md:hidden ml-auto">
@@ -207,7 +290,6 @@ const Navbar = () => {
       {/* ================= SECOND BAR ================= */}
       <div className="bg-green-700 text-white border-t border-green-500/30">
         <div className="max-w-7xl mx-auto px-4 relative" ref={catRef}>
-
           <div className="flex items-center h-12">
             <button
               onClick={() => setCatOpen(!catOpen)}
@@ -226,7 +308,6 @@ const Navbar = () => {
             }`}
           >
             <div className="max-w-7xl mx-auto p-6">
-              
               {/* SCROLLABLE AREA */}
               <div className="max-h-[70vh] overflow-y-auto custom-scrollbar grid grid-cols-1 md:grid-cols-4 gap-6">
                 {navbarCategories.map((cat, i) => (
@@ -248,10 +329,8 @@ const Navbar = () => {
                   </div>
                 ))}
               </div>
-
             </div>
           </div>
-
         </div>
       </div>
 
@@ -268,27 +347,53 @@ const Navbar = () => {
         </div>
 
         <div className="px-4 py-3 border-t border-green-500/30 flex flex-col gap-4">
+          {/* Mobile Icons with Navigation */}
           <div className="flex gap-4">
-            <Car size={20} />
-            <Heart size={20} />
-            <ShoppingCart size={22} />
+            <Car
+              size={20}
+              className="cursor-pointer hover:opacity-80"
+              onClick={() => handleIconNavigation("/")}
+            />
+            <Heart
+              size={20}
+              className="cursor-pointer hover:opacity-80"
+              onClick={() => handleIconNavigation("/wishlist")}
+            />
+            <ShoppingCart
+              size={22}
+              className="cursor-pointer hover:opacity-80"
+              onClick={() => handleIconNavigation("/cart")}
+            />
           </div>
 
           <div className="flex flex-col gap-2">
             {user ? (
               <>
                 <p className="text-sm font-semibold">{user.name}</p>
-                <button onClick={() => handleAccountClick("profile")}>Profile</button>
-                <button onClick={() => handleAccountClick("orders")}>Orders</button>
-                <button onClick={() => handleAccountClick("settings")}>Settings</button>
-                <button onClick={() => handleAccountClick("logout")} className="text-red-300">
+                <button onClick={() => handleAccountClick("profile")}>
+                  Profile
+                </button>
+                <button onClick={() => handleAccountClick("orders")}>
+                  Orders
+                </button>
+                <button onClick={() => handleAccountClick("settings")}>
+                  Settings
+                </button>
+                <button
+                  onClick={() => handleAccountClick("logout")}
+                  className="text-red-300"
+                >
                   Logout
                 </button>
               </>
             ) : (
               <>
-                <button onClick={() => handleAccountClick("signin")}>Sign In</button>
-                <button onClick={() => handleAccountClick("signup")}>Create Account</button>
+                <button onClick={() => handleAccountClick("signin")}>
+                  Sign In
+                </button>
+                <button onClick={() => handleAccountClick("signup")}>
+                  Create Account
+                </button>
               </>
             )}
           </div>

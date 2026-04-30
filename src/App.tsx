@@ -26,6 +26,8 @@ import { useAuthStore } from "./store/AuthStore";
 import ProductBuilder from "./admin/components/ProductBuilder";
 import AdminFitmentsWrapper from "./admin/payloads/AdminFitmentsWrapper";
 import Cart from "./client/pages/Cart";
+import ProductDetails from "./client/pages/ProductDetails";
+import WishlistPage from "./client/pages/WishlistPage";
 
 function App() {
   const initAuth = useAuthStore((s) => s.initAuth);
@@ -43,6 +45,9 @@ function App() {
       <Route element={<ClientLayout />}>
         <Route path="/" element={<Home />} />
         <Route path="/cart" element={<Cart />} />
+        <Route path="/product/:id" element={<ProductDetails />} />
+        <Route path="/wishlist" element={<WishlistPage />} />
+
       </Route>
 
       <Route path="/auth" element={<AuthPage />} />

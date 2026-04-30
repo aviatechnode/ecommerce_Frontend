@@ -2,6 +2,7 @@
 
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { api } from "../../api/axios";
+import type { RootState } from "../store/store";
 
 interface CartState {
   cart: any | null;
@@ -238,5 +239,13 @@ const cartSlice = createSlice({
       });
   },
 });
+
+// cartSlice.ts (add after the slice)
+export const selectCart = (state: RootState) => state.cart.cart;
+export const selectCartItems = (state: RootState) => state.cart.cart?.items ?? [];
+export const selectCartSubtotal = (state: RootState) => state.cart.totals.subtotal;
+export const selectCartTotalItems = (state: RootState) => state.cart.totals.totalItems;
+export const selectCartLoading = (state: RootState) => state.cart.loading;
+export const selectCartError = (state: RootState) => state.cart.error;
 
 export default cartSlice.reducer;

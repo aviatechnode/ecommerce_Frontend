@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import type { AppDispatch } from "../../admin/store/store";
 import { addToCart } from "../../admin/state-management/cartSlice";
+import { addToWishlist } from "../../admin/state-management/wishlistSlice";
 import { useState, useMemo } from "react";
 
 interface Product {
@@ -12,7 +13,12 @@ interface Product {
   description: string | null;
   brand: { id: string; name: string } | null;
   category: { id: string; name: string } | null;
-  oemNumber: string | null;
+
+  // ✅ FIXED: now matches backend
+  oemNumbers: Array<{
+    oemNumber: string;
+  }>;
+
   variants: Array<{
     id: string;
     name: string;
@@ -30,6 +36,7 @@ interface Product {
       threshold: number;
     }>;
   }>;
+
   medias: Array<{ url: string; type: "IMAGE" | "VIDEO"; position: number }>;
   specifications: Array<{ name: string; value: string }>;
   productFitments: Array<{ trimId: string; notes: string | null }>;
@@ -47,32 +54,52 @@ export default function ProductCard({ product }: Props) {
   const [added, setAdded] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
 
-  // Extract product information with enhanced properties
   const image = product.medias?.[0]?.url;
   const firstVariant = product.variants?.[0];
   const variantId = firstVariant?.id;
 
-  // Calculate price range across all variants
+  // ✅ OEM formatter (safe + clean)
+  const oemDisplay = useMemo(() => {
+    if (!product.oemNumbers?.length) return null;
+
+    const cleaned = product.oemNumbers
+      .map((o) => o.oemNumber?.trim())
+      .filter(Boolean);
+
+    if (!cleaned.length) return null;
+
+    // Optional: limit display (better UX)
+    const visible = cleaned.slice(0, 2).join(", ");
+    const extra = cleaned.length > 2 ? ` +${cleaned.length - 2}` : "";
+
+    return visible + extra;
+  }, [product.oemNumbers]);
+
   const priceRange = useMemo(() => {
     if (!product.variants?.length) return null;
+
     const prices = product.variants
       .map((v) => v.price)
       .filter((p): p is number => p != null);
-    if (prices.length === 0) return null;
+
+    if (!prices.length) return null;
+
     const min = Math.min(...prices);
     const max = Math.max(...prices);
+
     return { min, max, hasRange: min !== max };
   }, [product.variants]);
 
-  // Calculate stock status from first variant's inventories
   const stockStatus = useMemo(() => {
-    if (!firstVariant?.inventories?.length)
+    if (!firstVariant?.inventories?.length) {
       return { available: false, totalStock: 0, isLowStock: false };
+    }
 
     const totalStock = firstVariant.inventories.reduce(
       (sum, inv) => sum + (inv.stock - (inv.reserved ?? 0)),
       0
     );
+
     return {
       available: totalStock > 0,
       totalStock,
@@ -80,13 +107,8 @@ export default function ProductCard({ product }: Props) {
     };
   }, [firstVariant]);
 
-  // Get first specification if exists
   const firstSpec = product.specifications?.[0];
-
-  // Check if product has multiple variants
   const hasMultipleVariants = (product.variants?.length || 0) > 1;
-
-  // Check if product has any media
   const hasMultipleImages = (product.medias?.length || 0) > 1;
 
   const handleAddToCart = async (e: React.MouseEvent) => {
@@ -105,25 +127,35 @@ export default function ProductCard({ product }: Props) {
       ).unwrap();
 
       setAdded(true);
-
       setTimeout(() => setAdded(false), 1500);
     } finally {
       setAdding(false);
     }
   };
 
-  const handleWishlist = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsWishlisted(!isWishlisted);
-    // Add wishlist API call here if needed
-  };
+  const handleWishlist = async (e: React.MouseEvent) => {
+  e.stopPropagation();
+
+  try {
+    if (isWishlisted) {
+      // optional: implement removeWishlistItem(productId)
+      setIsWishlisted(false);
+      return;
+    }
+
+    await dispatch(addToWishlist(product.id)).unwrap();
+    setIsWishlisted(true);
+  } catch (err) {
+    console.error("Wishlist error:", err);
+  }
+};
 
   return (
     <div
       onClick={() => navigate(`/product/${product.id}`)}
       className="group bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer border border-gray-100 hover:border-green-200 transform hover:-translate-y-1"
     >
-      {/* IMAGE SECTION */}
+      {/* IMAGE */}
       <div className="relative h-52 bg-linear-to-br from-gray-50 to-gray-100 overflow-hidden">
         {image ? (
           <>
@@ -133,8 +165,9 @@ export default function ProductCard({ product }: Props) {
               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
               loading="lazy"
             />
+
             {hasMultipleImages && (
-              <div className="absolute bottom-2 left-2 bg-black/50 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-full">
+              <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded-full">
                 +{product.medias.length - 1} more
               </div>
             )}
@@ -145,10 +178,10 @@ export default function ProductCard({ product }: Props) {
           </div>
         )}
 
-        {/* Wishlist Button */}
+        {/* Wishlist */}
         <button
           onClick={handleWishlist}
-          className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm p-2 rounded-full shadow-md hover:shadow-lg transition-all hover:scale-110"
+          className="absolute top-3 right-3 bg-white/90 p-2 rounded-full shadow-md hover:scale-110"
         >
           <Heart
             size={18}
@@ -156,22 +189,23 @@ export default function ProductCard({ product }: Props) {
           />
         </button>
 
-        {/* Stock Status Badge */}
+        {/* Stock */}
         {!stockStatus.available && (
-          <div className="absolute top-3 left-3 bg-red-500 text-white text-xs font-semibold px-2 py-1 rounded-lg shadow-md">
+          <div className="absolute top-3 left-3 bg-red-500 text-white text-xs px-2 py-1 rounded-lg">
             Out of Stock
           </div>
         )}
-        {stockStatus.isLowStock && stockStatus.available && (
-          <div className="absolute top-3 left-3 bg-orange-500 text-white text-xs font-semibold px-2 py-1 rounded-lg shadow-md">
+
+        {stockStatus.isLowStock && (
+          <div className="absolute top-3 left-3 bg-orange-500 text-white text-xs px-2 py-1 rounded-lg">
             Low Stock ({stockStatus.totalStock})
           </div>
         )}
       </div>
 
-      {/* CONTENT SECTION */}
+      {/* CONTENT */}
       <div className="p-4 space-y-3">
-        {/* Brand & Category Row */}
+        {/* Brand + OEM */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {product.brand?.name && (
@@ -179,6 +213,7 @@ export default function ProductCard({ product }: Props) {
                 {product.brand.name}
               </span>
             )}
+
             {product.category?.name && (
               <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-lg">
                 {product.category.name}
@@ -186,27 +221,24 @@ export default function ProductCard({ product }: Props) {
             )}
           </div>
 
-          {/* OEM Number if exists */}
-          {product.oemNumber && (
+          {/* ✅ FIXED OEM DISPLAY */}
+          {oemDisplay && (
             <span className="text-xs text-gray-400 font-mono">
-              OEM: {product.oemNumber}
+              OEM: {oemDisplay}
             </span>
           )}
         </div>
 
-        {/* Product Name */}
-        <h3 className="font-semibold text-gray-800 line-clamp-2 text-base hover:text-green-600 transition-colors">
+        <h3 className="font-semibold text-gray-800 line-clamp-2 hover:text-green-600">
           {product.name}
         </h3>
 
-        {/* Description Preview */}
         {product.description && (
           <p className="text-xs text-gray-500 line-clamp-2">
             {product.description}
           </p>
         )}
 
-        {/* Specification Preview */}
         {firstSpec && (
           <div className="flex items-center gap-1 text-xs text-gray-600 bg-gray-50 px-2 py-1 rounded-lg w-fit">
             <Tag size={12} />
@@ -216,29 +248,28 @@ export default function ProductCard({ product }: Props) {
           </div>
         )}
 
-        {/* Variants Info */}
         {hasMultipleVariants && (
           <div className="flex items-center gap-1 text-xs text-blue-600">
             <Layers size={12} />
-            <span>{product.variants?.length} variants available</span>
+            <span>{product.variants.length} variants available</span>
           </div>
         )}
 
-        {/* Price Section */}
+        {/* PRICE */}
         <div className="flex items-center justify-between pt-2 border-t border-gray-100">
           <div>
             {priceRange ? (
-              <div className="flex flex-col">
+              <div>
                 <span className="text-2xl font-bold text-green-600">
                   ₦{priceRange.min.toLocaleString()}
                   {priceRange.hasRange && (
-                    <span className="text-sm text-gray-500 font-normal ml-1">
+                    <span className="text-sm text-gray-500 ml-1">
                       - ₦{priceRange.max.toLocaleString()}
                     </span>
                   )}
                 </span>
                 {hasMultipleVariants && (
-                  <span className="text-xs text-gray-400">Starting from</span>
+                  <div className="text-xs text-gray-400">Starting from</div>
                 )}
               </div>
             ) : (
@@ -248,41 +279,34 @@ export default function ProductCard({ product }: Props) {
             )}
           </div>
 
-          {/* Add to Cart Button with Stock Awareness */}
+          {/* ADD TO CART */}
           <button
             onClick={handleAddToCart}
             disabled={!variantId || adding || !stockStatus.available}
-            className={`p-2.5 rounded-xl transition-all duration-200 flex items-center justify-center gap-2
-              ${
-                added
-                  ? "bg-green-700 hover:bg-green-800"
-                  : stockStatus.available
-                  ? "bg-green-600 hover:bg-green-700 hover:shadow-lg active:scale-95"
-                  : "bg-gray-300 cursor-not-allowed"
-              } disabled:opacity-50`}
+            className={`p-2.5 rounded-xl flex items-center gap-2 ${
+              added
+                ? "bg-green-700"
+                : stockStatus.available
+                ? "bg-green-600 hover:bg-green-700"
+                : "bg-gray-300"
+            }`}
           >
             {added ? (
               <>
                 <Check size={18} className="text-white" />
-                <span className="text-white text-sm font-medium hidden sm:inline">
-                  Added!
-                </span>
               </>
             ) : adding ? (
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
                 <ShoppingCart size={18} className="text-white" />
-                <span className="text-white text-sm font-medium hidden sm:inline">
-                  {!stockStatus.available ? "Out of stock" : "Add"}
-                </span>
               </>
             )}
           </button>
         </div>
 
-        {/* Quick Stock Info */}
-        {stockStatus.available && stockStatus.totalStock > 0 && (
+        {/* STOCK INFO */}
+        {stockStatus.available && (
           <div className="flex items-center gap-1 text-xs text-green-600">
             <AlertCircle size={10} />
             <span>{stockStatus.totalStock} units in stock</span>

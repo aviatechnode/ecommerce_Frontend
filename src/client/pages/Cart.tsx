@@ -1,7 +1,7 @@
 // src/pages/Cart.tsx
-
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom"; // ← add this
 import type { RootState, AppDispatch } from "../../admin/store/store";
 import {
   fetchCart,
@@ -12,6 +12,7 @@ import {
 
 const Cart = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate(); // ← add this
 
   const { cart, totals, shipping, grandTotal, loading } = useSelector(
     (state: RootState) => state.cart
@@ -50,6 +51,11 @@ const Cart = () => {
 
   const handleClearCart = async () => {
     await dispatch(clearCart()).unwrap();
+  };
+
+  // Add this handler
+  const handleCheckout = () => {
+    navigate("/checkout");
   };
 
   if (loading) {
@@ -157,6 +163,7 @@ const Cart = () => {
 
           <button
             type="button"
+            onClick={handleCheckout} // ← updated
             className="w-full mt-4 bg-green-600 text-white py-3 rounded-lg hover:bg-green-700"
           >
             Checkout
