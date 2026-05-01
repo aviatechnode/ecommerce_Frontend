@@ -40,7 +40,7 @@ const initialState: WishlistState = {
 };
 
 //////////////////////////////////////////////////////////
-// THUNKS (✅ FIXED ENDPOINTS)
+// THUNKS
 //////////////////////////////////////////////////////////
 
 /* GET WISHLIST */
@@ -111,6 +111,31 @@ export const clearWishlist = createAsyncThunk(
   }
 );
 
+/* 🔥 TOGGLE WISHLIST (NEW) */
+export const toggleWishlist = createAsyncThunk(
+  "wishlist/toggle",
+  async (productId: string, { getState, dispatch, rejectWithValue }: any) => {
+    try {
+      const state = getState().wishlist;
+      const existing = state.wishlist?.items.find(
+        (item: WishlistItem) => item.productId === productId
+      );
+
+      if (existing) {
+        await dispatch(removeWishlistItem(existing.id)).unwrap();
+        return { removed: true, productId };
+      } else {
+        const item = await dispatch(addToWishlist(productId)).unwrap();
+        return { added: true, item };
+      }
+    } catch (err: any) {
+      return rejectWithValue(
+        err?.message || "Failed to toggle wishlist"
+      );
+    }
+  }
+);
+
 //////////////////////////////////////////////////////////
 // SLICE
 //////////////////////////////////////////////////////////
@@ -151,7 +176,14 @@ const wishlistSlice = createSlice({
           state.wishlist = { id: "", items: [] };
         }
 
-        state.wishlist.items.push(action.payload);
+        // prevent duplicates (extra safety)
+        const exists = state.wishlist.items.some(
+          (item) => item.productId === action.payload.productId
+        );
+
+        if (!exists) {
+          state.wishlist.items.push(action.payload);
+        }
       })
 
       //////////////////////////////////////////////////////////
@@ -174,6 +206,32 @@ const wishlistSlice = createSlice({
         if (!state.wishlist) return;
 
         state.wishlist.items = [];
+      })
+
+      //////////////////////////////////////////////////////////
+      // 🔥 TOGGLE (NEW)
+      //////////////////////////////////////////////////////////
+
+      .addCase(toggleWishlist.fulfilled, (state, action) => {
+        if (!state.wishlist) {
+          state.wishlist = { id: "", items: [] };
+        }
+
+        if (action.payload?.added) {
+          const exists = state.wishlist.items.some(
+            (item) => item.productId === action.payload.item.productId
+          );
+
+          if (!exists) {
+            state.wishlist.items.push(action.payload.item);
+          }
+        }
+
+        if (action.payload?.removed) {
+          state.wishlist.items = state.wishlist.items.filter(
+            (item) => item.productId !== action.payload.productId
+          );
+        }
       });
   },
 });

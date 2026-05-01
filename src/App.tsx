@@ -28,6 +28,7 @@ import AdminFitmentsWrapper from "./admin/payloads/AdminFitmentsWrapper";
 import Cart from "./client/pages/Cart";
 import ProductDetails from "./client/pages/ProductDetails";
 import WishlistPage from "./client/pages/WishlistPage";
+import CheckoutPage from "./client/pages/Checkout";
 
 function App() {
   const initAuth = useAuthStore((s) => s.initAuth);
@@ -47,7 +48,7 @@ function App() {
         <Route path="/cart" element={<Cart />} />
         <Route path="/product/:id" element={<ProductDetails />} />
         <Route path="/wishlist" element={<WishlistPage />} />
-
+        <Route path="/checkout" element={<CheckoutPage />} />
       </Route>
 
       <Route path="/auth" element={<AuthPage />} />
