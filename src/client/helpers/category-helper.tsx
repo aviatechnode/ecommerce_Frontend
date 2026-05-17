@@ -1,4 +1,4 @@
-import type { Category } from "../../admin/state-management/categorySlice";
+import type { Category } from "../../services/categoryApi";
 import {
   Cpu,
   Disc,
@@ -7,6 +7,7 @@ import {
   Wrench,
   Cog,
   Car,
+  Droplets,
 } from "lucide-react";
 
 export interface NavbarCategory {
@@ -15,7 +16,10 @@ export interface NavbarCategory {
   items: string[];
 }
 
-/* ================= ICON MAP ================= */
+/* =========================================================
+ICON MAP
+========================================================= */
+
 const iconRegistry: Record<string, any> = {
   engine: Cpu,
   brake: Disc,
@@ -25,39 +29,75 @@ const iconRegistry: Record<string, any> = {
   transmission: Cog,
   drivetrain: Cog,
   body: Car,
+  lubricant: Droplets,
   general: Car,
 };
 
-/* ================= ICON RESOLVER ================= */
+/* =========================================================
+ICON RESOLVER
+========================================================= */
+
 const resolveIconByType = (type?: string) => {
   const key = (type || "general").toLowerCase();
+
   return iconRegistry[key] || Car;
 };
 
-/* ================= MAIN TRANSFORM ================= */
+/* =========================================================
+MAIN TRANSFORM
+========================================================= */
+
 export const transformCategoriesToNavbar = (
   categories: Category[] = []
 ): NavbarCategory[] => {
   if (!categories.length) return [];
 
-  // group by TYPE (NOT parentId)
+  /**
+   * Group categories by TYPE
+   * Example:
+   * engine -> [Oil Pump, Timing Belt]
+   * brake -> [Brake Pad, Rotor]
+   */
+
   const grouped: Record<string, Category[]> = {};
 
-  for (const cat of categories) {
-    const type = (cat.type || "general").toLowerCase();
+  for (const category of categories) {
+    // skip inactive categories if needed
+    if (!category.isActive) continue;
 
-    if (!grouped[type]) grouped[type] = [];
+    const type = (category.type || "general").toLowerCase();
 
-    grouped[type].push(cat);
+    if (!grouped[type]) {
+      grouped[type] = [];
+    }
+
+    grouped[type].push(category);
   }
 
   return Object.entries(grouped).map(([type, cats]) => {
     const Icon = resolveIconByType(type);
 
+    /**
+     * Remove duplicate names
+     * + sort alphabetically for clean navbar UI
+     */
+
+    const uniqueItems = Array.from(
+      new Set(
+        cats
+          .map((category) => category.name?.trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+
     return {
-      title: type.toUpperCase(),
+      title:
+        type.charAt(0).toUpperCase() +
+        type.slice(1).toLowerCase(),
+
       icon: <Icon size={16} />,
-      items: cats.map((c) => c.name),
+
+      items: uniqueItems,
     };
   });
 };

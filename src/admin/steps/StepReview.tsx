@@ -1,28 +1,147 @@
-import { useDispatch } from "react-redux";
-import type { AppDispatch } from "../store/store";
-import { createProduct } from "../state-management/productSlice";
-import { useProductBuilder } from "../store/productBuilderStore";
-import { buildProductPayload } from "../payloads/buildProductPayload";
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
+import { useFormContext } from "react-hook-form";
+import { 
+  CheckCircle, 
+  AlertCircle, 
+  ChevronDown, 
+  ChevronUp, 
+  Package, 
+  Image, 
+  Hash, 
+  FileText, 
+  ArrowLeft, 
+  Send, 
+  TrendingUp, 
+  Clock, 
+  Tag, 
+  Building2,
+  Loader2
+} from "lucide-react";
 
-export default function StepReview() {
-  const dispatch = useDispatch<AppDispatch>();
+import type { ProductFormValues } from "../../types/product.form.types";
 
-  const state = useProductBuilder();
-  const { prevStep, reset } = state;
+
+import { useCreateProductMutation } from "../../services/productApi";
+import type { StepProps } from "./util/stepProps";
+import type { CreateProductInput } from "../../schemas/product.schema";
+
+
+
+/* =========================================================
+   COMPONENT
+========================================================= */
+function StepReviewComponent({ prevStep }: StepProps) {
+  const [createProduct] = useCreateProductMutation();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [showJson, setShowJson] = useState(false);
 
-  const payload = buildProductPayload(state);
+  /* ---------------------------------------------------------
+     React Hook Form
+  --------------------------------------------------------- */
+  const { watch, reset } = useFormContext<ProductFormValues>();
+  const formValues = watch();
 
-  const isValid =
-    payload.name &&
-    payload.brandId &&
-    payload.categoryId;
+  /* ---------------------------------------------------------
+     Validation
+  --------------------------------------------------------- */
+  const isValid = useMemo(() => {
+    return !!formValues.name && !!formValues.brandId && !!formValues.categoryId;
+  }, [formValues.name, formValues.brandId, formValues.categoryId]);
 
+  /* ---------------------------------------------------------
+     Stats for summary cards
+  --------------------------------------------------------- */
+  const stats = useMemo(
+    () => [
+      {
+        label: "Variants",
+        value: formValues.variants?.length || 0,
+        icon: Package,
+        gradient: "from-blue-500 to-blue-600",
+      },
+      {
+        label: "Images",
+        value: formValues.medias?.length || 0,
+        icon: Image,
+        gradient: "from-purple-500 to-purple-600",
+      },
+      {
+        label: "OEM Numbers",
+        value: formValues.oemNumbers?.length || 0,
+        icon: Hash,
+        gradient: "from-orange-500 to-orange-600",
+      },
+      {
+        label: "Specifications",
+        value: formValues.specifications?.length || 0,
+        icon: FileText,
+        gradient: "from-green-500 to-green-600",
+      },
+    ],
+    [formValues]
+  );
+
+  /* ---------------------------------------------------------
+     Additional product info
+  --------------------------------------------------------- */
+  const productInfo = useMemo(() => {
+  const totalInventory =
+    formValues.variants?.reduce((sum, variant) => {
+      const variantStock =
+        variant.inventories?.reduce(
+          (invSum, inv) => invSum + (inv.stock || 0),
+          0
+        ) || 0;
+
+      return sum + variantStock;
+    }, 0) ?? 0;
+
+  const totalValue =
+    formValues.variants?.reduce((sum, variant) => {
+      const stock =
+        variant.inventories?.reduce(
+          (invSum, inv) => invSum + (inv.stock || 0),
+          0
+        ) || 0;
+
+      return sum + (variant.price || 0) * stock;
+    }, 0) ?? 0;
+
+  const hasAttributes =
+    formValues.variants?.some(
+      (v) => (v.attributes?.length ?? 0) > 0
+    ) ?? false;
+
+  return {
+    totalInventory,
+    totalValue,
+    hasAttributes,
+  };
+}, [formValues.variants]);
+  /* ---------------------------------------------------------
+     Reset payload
+  --------------------------------------------------------- */
+  const defaultResetValues: CreateProductInput = {
+    name: "",
+    description: "",
+    brandId: "",
+    categoryId: "",
+    isActive: true,
+    isFeatured: false,
+    searchKeywords: "",
+    oemNumbers: [],
+    variants: [],
+    specifications: [],
+    productFitments: [],
+    medias: [],
+  };
+
+  /* ---------------------------------------------------------
+     Submit handler
+  --------------------------------------------------------- */
   const handleSubmit = async () => {
     setError(null);
     setSuccess(null);
@@ -34,83 +153,363 @@ export default function StepReview() {
 
     try {
       setLoading(true);
-
-      await dispatch(createProduct(payload)).unwrap();
-
-      setSuccess("✅ Product created successfully");
-
-      reset();
+      await createProduct(formValues as CreateProductInput).unwrap();
+      setSuccess("✨ Product created successfully!");
+      reset(defaultResetValues);
+      
+      // Auto-hide success message after 5 seconds
+      setTimeout(() => setSuccess(null), 5000);
     } catch (err: any) {
-      setError(err?.message || "Failed to create product");
+      setError(err?.data?.message || err?.message || "Failed to create product");
     } finally {
       setLoading(false);
     }
   };
 
+  /* ---------------------------------------------------------
+     Render
+  --------------------------------------------------------- */
   return (
-    <div className="space-y-6 pb-24"> {/* padding for fixed footer */}
-
-      {/* HEADER */}
-      <div>
-        <h2 className="text-xl font-bold">Review Product</h2>
-        <p className="text-sm text-gray-500">
-          Confirm details before creating
-        </p>
-      </div>
-
-      {/* ALERTS */}
-      {success && (
-        <div className="bg-green-50 border text-green-700 p-3 rounded">
-          {success}
+    <div className="min-h-screen bg-linear-to-br from-gray-50 to-gray-100 p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        {/* HEADER */}
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-white p-6 shadow-sm">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+              📋 Review & Create Product
+            </h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Confirm all details before creating your product
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className={`flex items-center gap-2 rounded-full px-3 py-1 text-sm ${
+              isValid ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+            }`}>
+              <div className={`h-2 w-2 rounded-full ${isValid ? "bg-green-500" : "bg-amber-500"}`} />
+              {isValid ? "Ready to create" : "Incomplete"}
+            </div>
+          </div>
         </div>
-      )}
 
-      {error && (
-        <div className="bg-red-50 border text-red-600 p-3 rounded">
-          {error}
+        {/* SUCCESS ALERT */}
+        {success && (
+          <div className="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4 shadow-sm">
+            <CheckCircle className="mt-0.5 h-5 w-5 text-green-600" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-green-800">{success}</p>
+              <p className="mt-1 text-xs text-green-700">
+                The product has been successfully added to your catalog.
+              </p>
+            </div>
+            <button
+              onClick={() => setSuccess(null)}
+              className="text-green-600 hover:text-green-800"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* ERROR ALERT */}
+        {error && (
+          <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm">
+            <AlertCircle className="mt-0.5 h-5 w-5 text-red-600" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-red-800">Error creating product</p>
+              <p className="mt-1 text-xs text-red-700">{error}</p>
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="text-red-600 hover:text-red-800"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* WARNING IF INVALID */}
+        {!isValid && (
+          <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+            <AlertCircle className="mt-0.5 h-5 w-5 text-amber-600" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800">Incomplete Information</p>
+              <p className="mt-1 text-xs text-amber-700">
+                Please complete all required fields (Product Name, Brand, and Category) before creating.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* MAIN 2-COLUMN GRID */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* LEFT COLUMN - Main Content (2/3) */}
+          <div className="space-y-6 lg:col-span-2">
+            {/* PRODUCT SUMMARY CARD */}
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <div className="border-b border-gray-200 bg-linear-to-r from-gray-50 to-white px-6 py-4">
+                <h2 className="text-lg font-semibold text-gray-900">📊 Product Summary</h2>
+                <p className="text-sm text-gray-500">Overview of your product configuration</p>
+              </div>
+
+              <div className="space-y-6 p-6">
+                {/* BASIC INFO */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium uppercase tracking-wide text-gray-500">
+                    Basic Information
+                  </h3>
+                  <div className="grid gap-3 rounded-lg bg-gray-50 p-4">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                      <span className="text-sm font-medium text-gray-600">Product Name:</span>
+                      <span className="text-sm text-gray-900 font-medium break-all sm:text-right">
+                        {formValues.name || "—"}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <span className="text-sm font-medium text-gray-600">Description:</span>
+                      <span className="text-sm text-gray-600 break-all sm:text-right">
+                        {formValues.description ? `${formValues.description.substring(0, 100)}${formValues.description.length > 100 ? "..." : ""}` : "—"}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <span className="text-sm font-medium text-gray-600">Search Keywords:</span>
+                      <span className="text-sm text-gray-600 break-all sm:text-right">
+                        {formValues.searchKeywords || "—"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* BRAND & CATEGORY */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium uppercase tracking-wide text-gray-500">
+                    Classification
+                  </h3>
+                  <div className="grid gap-3 rounded-lg bg-gray-50 p-4 sm:grid-cols-2">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-gray-400" />
+                      <span className="text-sm text-gray-600">Brand:</span>
+                      <span className="text-sm font-medium text-gray-900">{formValues.brandId || "—"}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Tag className="h-4 w-4 text-gray-400" />
+                      <span className="text-sm text-gray-600">Category:</span>
+                      <span className="text-sm font-medium text-gray-900">{formValues.categoryId || "—"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* STATUS TOGGLES */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium uppercase tracking-wide text-gray-500">
+                    Status Settings
+                  </h3>
+                  <div className="flex flex-wrap gap-4 rounded-lg bg-gray-50 p-4">
+                    <div className="flex items-center gap-2">
+                      <div className={`h-2 w-2 rounded-full ${formValues.isActive ? "bg-green-500" : "bg-gray-400"}`} />
+                      <span className="text-sm text-gray-700">
+                        {formValues.isActive ? "Active" : "Inactive"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`h-2 w-2 rounded-full ${formValues.isFeatured ? "bg-yellow-500" : "bg-gray-400"}`} />
+                      <span className="text-sm text-gray-700">
+                        {formValues.isFeatured ? "Featured" : "Not Featured"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* STATS GRID */}
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium uppercase tracking-wide text-gray-500">
+                    Content Statistics
+                  </h3>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {stats.map((stat) => {
+                      const Icon = stat.icon;
+                      return (
+                        <div
+                          key={stat.label}
+                          className={`flex items-center gap-3 rounded-xl bg-linear-to-r ${stat.gradient} p-4 shadow-sm`}
+                        >
+                          <div className="rounded-full bg-white/20 p-2">
+                            <Icon className="h-5 w-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-2xl font-bold text-white">{stat.value}</p>
+                            <p className="text-xs text-white/80">{stat.label}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* JSON TOGGLE SECTION */}
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <button
+                type="button"
+                onClick={() => setShowJson((prev) => !prev)}
+                className="flex w-full items-center justify-between bg-linear-to-r from-gray-50 to-white px-6 py-4 transition hover:bg-gray-50"
+              >
+                <span className="text-sm font-medium text-gray-700">🔧 Advanced: View Raw JSON</span>
+                {showJson ? (
+                  <ChevronUp className="h-4 w-4 text-gray-500" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-gray-500" />
+                )}
+              </button>
+
+              {showJson && (
+                <div className="border-t border-gray-200 p-4">
+                  <pre className="max-h-96 overflow-auto rounded-lg bg-gray-900 p-4 text-xs text-green-400 font-mono">
+                    {JSON.stringify(formValues, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT COLUMN - Sidebar (1/3) */}
+          <div className="space-y-6">
+            {/* Inventory Summary Card */}
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <div className="border-b border-gray-200 px-6 py-4">
+                <h3 className="font-semibold text-gray-900">📦 Inventory Summary</h3>
+              </div>
+              <div className="space-y-4 p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-gray-400" />
+                    <span className="text-sm text-gray-600">Total Stock</span>
+                  </div>
+                  <span className="text-lg font-bold text-gray-900">{productInfo.totalInventory.toLocaleString()} units</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-gray-400" />
+                    <span className="text-sm text-gray-600">Total Value</span>
+                  </div>
+                  <span className="text-lg font-bold text-green-600">
+                    ${productInfo.totalValue.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-gray-400" />
+                    <span className="text-sm text-gray-600">Has Attributes</span>
+                  </div>
+                  <span className={`text-sm font-medium ${productInfo.hasAttributes ? "text-green-600" : "text-gray-400"}`}>
+                    {productInfo.hasAttributes ? "Yes" : "No"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Requirements Checklist */}
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <div className="border-b border-gray-200 px-6 py-4">
+                <h3 className="font-semibold text-gray-900">✅ Requirements</h3>
+              </div>
+              <div className="space-y-3 p-6">
+                <div className="flex items-center gap-2">
+                  {formValues.name ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <div className="h-4 w-4 rounded-full border border-gray-300" />
+                  )}
+                  <span className="text-sm text-gray-600">Product Name</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {formValues.brandId ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <div className="h-4 w-4 rounded-full border border-gray-300" />
+                  )}
+                  <span className="text-sm text-gray-600">Brand Selection</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {formValues.categoryId ? (
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <div className="h-4 w-4 rounded-full border border-gray-300" />
+                  )}
+                  <span className="text-sm text-gray-600">Category Selection</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Stats */}
+            <div className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+              <div className="border-b border-gray-200 px-6 py-4">
+                <h3 className="font-semibold text-gray-900">📈 Quick Stats</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-4 p-6">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">{formValues.variants?.length || 0}</p>
+                  <p className="text-xs text-gray-500">Total Variants</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">{formValues.specifications?.length || 0}</p>
+                  <p className="text-xs text-gray-500">Specifications</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">{formValues.oemNumbers?.length || 0}</p>
+                  <p className="text-xs text-gray-500">OEM Numbers</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">{formValues.medias?.length || 0}</p>
+                  <p className="text-xs text-gray-500">Media Files</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      )}
 
-      {/* SUMMARY */}
-      <div className="bg-gray-50 border rounded p-4 text-sm space-y-1">
-        <div><b>Name:</b> {payload.name}</div>
-        <div><b>Variants:</b> {payload.variants?.length || 0}</div>
-        <div><b>Images:</b> {payload.medias?.length || 0}</div>
-      </div>
+        {/* ACTION BAR */}
+        <div className="flex flex-col-reverse gap-3 rounded-2xl bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <button
+            type="button"
+            onClick={prevStep}
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-6 py-2.5 font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Edit
+          </button>
 
-      {/* JSON */}
-      <button
-        onClick={() => setShowJson(!showJson)}
-        className="text-sm text-green-700 underline"
-      >
-        {showJson ? "Hide JSON" : "Show JSON"}
-      </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={loading || !isValid}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-linear-to-r from-green-600 to-green-700 px-6 py-2.5 font-semibold text-white shadow-sm transition-all hover:scale-105 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Creating Product...
+              </>
+            ) : (
+              <>
+                <Send className="h-4 w-4" />
+                Create Product
+              </>
+            )}
+          </button>
+        </div>
 
-      {showJson && (
-        <pre className="bg-gray-100 p-3 text-xs rounded max-h-80 overflow-auto">
-          {JSON.stringify(payload, null, 2)}
-        </pre>
-      )}
-
-      {/* FIXED ACTION BAR */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t p-4 flex justify-between">
-
-        <button
-          onClick={prevStep}
-          disabled={loading}
-          className="px-4 py-2 bg-gray-200 rounded"
-        >
-          Back
-        </button>
-
-        <button
-          onClick={handleSubmit}
-          disabled={loading || !isValid}
-          className="px-6 py-2 bg-green-600 text-white rounded disabled:opacity-50"
-        >
-          {loading ? "Creating..." : "Create Product"}
-        </button>
+        {/* FOOTER SUMMARY */}
+        <div className="rounded-2xl bg-white p-4 text-center text-sm text-gray-500 shadow-sm">
+          📊 Ready to publish your product? Review all details above before creating.
+        </div>
       </div>
     </div>
   );
 }
+
+const StepReview = memo(StepReviewComponent);
+
+export default StepReview;

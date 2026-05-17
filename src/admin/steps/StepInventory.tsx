@@ -1,251 +1,463 @@
-import { useEffect } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { fetchWarehouses } from "../state-management/warehouseSlice";
-import type { RootState, AppDispatch } from "../store/store";
-import { useProductBuilder } from "../store/productBuilderStore";
+import { memo } from "react";
 
-export default function StepInventory() {
-  const dispatch = useDispatch<AppDispatch>();
+import {
+  useFormContext,
+  useFieldArray,
+} from "react-hook-form";
 
-  const { warehouses, loading, fetched } = useSelector(
-    (state: RootState) => state.warehouses
-  );
+import {
+  useGetWarehousesQuery,
+} from "../../services/warehouseApi";
 
-  const { variants, updateVariant, nextStep, prevStep } =
-    useProductBuilder();
+import type {
+  CreateProductInput,
+} from "../../schemas/product.schema";
 
-  useEffect(() => {
-    if (!fetched && !loading) {
-      dispatch(fetchWarehouses());
-    }
-  }, [dispatch, fetched, loading]);
+import type { ProductVariant } from "../../admin/store/productBuilderStore";
+import type { StepProps } from "./util/stepProps";
 
-  // convert safe numbers
-  const toNumber = (value: string) => {
-    if (value === "") return undefined;
-    const num = Number(value);
-    return isNaN(num) ? undefined : num;
-  };
 
-  const updateInventory = (
-    variantId: string,
-    index: number,
-    field: string,
-    value: any
+/* =========================================================
+   COMPONENT PROPS
+========================================================= */
+
+interface StepInventoryProps extends StepProps {}
+
+/* =========================================================
+   COMPONENT
+========================================================= */
+
+function StepInventoryComponent({
+  nextStep,
+  prevStep,
+}: StepInventoryProps) {
+  /* ---------------------------------------------------------
+     REACT HOOK FORM
+  --------------------------------------------------------- */
+
+  const {
+    control,
+    watch,
+    register,
+    setValue,
+  } =
+    useFormContext<CreateProductInput>();
+
+  const {
+    fields: variants,
+  } = useFieldArray<
+    CreateProductInput,
+    "variants"
+  >({
+    control,
+    name: "variants",
+  });
+
+  /* ---------------------------------------------------------
+     API
+  --------------------------------------------------------- */
+
+  const {
+    data: warehouses = [],
+    isLoading,
+  } =
+    useGetWarehousesQuery();
+
+  /* ---------------------------------------------------------
+     ADD INVENTORY
+  --------------------------------------------------------- */
+
+  const addInventoryRow = (
+    variantIndex: number
   ) => {
-    const variant = variants.find((v) => v.id === variantId);
-    if (!variant) return;
+    const currentInventories =
+      watch(
+        `variants.${variantIndex}.inventories`
+      ) ?? [];
 
-    const inventories = [...(variant.inventories || [])];
+    setValue(
+      `variants.${variantIndex}.inventories`,
+      [
+        ...currentInventories,
 
-    inventories[index] = {
-      ...(inventories[index] || {
-        warehouseId: "",
-        stock: 0,
-        reserved: 0,
-        threshold: 0,
-      }),
-      [field]: value,
-    };
-
-    updateVariant(variantId, "inventories", inventories);
-  };
-
-  const addInventoryRow = (variantId: string) => {
-    const variant = variants.find((v) => v.id === variantId);
-    if (!variant) return;
-
-    updateVariant(variantId, "inventories", [
-      ...(variant.inventories || []),
+        {
+          warehouseId: "",
+          stock: 0,
+          reserved: 0,
+          threshold: 0,
+        },
+      ],
       {
-        warehouseId: "",
-        stock: 0,
-        reserved: 0,
-        threshold: 0,
-      },
-    ]);
+        shouldDirty: true,
+      }
+    );
   };
 
-  const removeInventoryRow = (variantId: string, index: number) => {
-    const variant = variants.find((v) => v.id === variantId);
-    if (!variant) return;
+  /* ---------------------------------------------------------
+     REMOVE INVENTORY
+  --------------------------------------------------------- */
 
-    const inventories = [...(variant.inventories || [])];
-    inventories.splice(index, 1);
+  const removeInventoryRow = (
+    variantIndex: number,
+    inventoryIndex: number
+  ) => {
+    const currentInventories =
+      watch(
+        `variants.${variantIndex}.inventories`
+      ) ?? [];
 
-    updateVariant(variantId, "inventories", inventories);
+    setValue(
+      `variants.${variantIndex}.inventories`,
+      currentInventories.filter(
+        (_, i) =>
+          i !== inventoryIndex
+      ),
+      {
+        shouldDirty: true,
+      }
+    );
   };
+
+  /* ---------------------------------------------------------
+     AVAILABLE STOCK
+  --------------------------------------------------------- */
+
+  const getAvailableStock = (
+    variantIndex: number,
+    inventoryIndex: number
+  ) => {
+    const stock =
+      Number(
+        watch(
+          `variants.${variantIndex}.inventories.${inventoryIndex}.stock`
+        ) ?? 0
+      );
+
+    const reserved =
+      Number(
+        watch(
+          `variants.${variantIndex}.inventories.${inventoryIndex}.reserved`
+        ) ?? 0
+      );
+
+    return Math.max(
+      0,
+      stock - reserved
+    );
+  };
+
+  /* ---------------------------------------------------------
+     RENDER
+  --------------------------------------------------------- */
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-linear-to-br from-gray-50 to-gray-100 p-6">
+      <div className="mx-auto max-w-5xl space-y-6">
+        {/* HEADER */}
 
-      {/* HEADER */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-800">
-          Inventory
-        </h2>
-        <p className="text-sm text-gray-500">
-          Set stock levels for each warehouse per variant
-        </p>
-      </div>
+        <div className="rounded-2xl bg-white p-6 shadow-sm">
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+            📦 Inventory Management
+          </h1>
 
-      {/* VARIANTS */}
-      <div className="space-y-6">
-        {variants.map((v) => (
-          <div
-            key={v.id}
-            className="border rounded-xl p-5 bg-white shadow-sm space-y-4"
-          >
+          <p className="mt-1 text-sm text-gray-500">
+            Set stock levels for
+            each warehouse per
+            variant
+          </p>
+        </div>
 
-            {/* VARIANT HEADER */}
-            <div>
-              <h3 className="font-semibold text-gray-800">
-                {v.name || "Unnamed Variant"}
-              </h3>
-              <p className="text-xs text-gray-400">
-                SKU: {v.sku || "N/A"}
+        {/* VARIANTS */}
+
+        <div className="space-y-6">
+          {variants.length ===
+            0 && (
+            <div className="rounded-2xl border border-gray-200 bg-white p-12 text-center shadow-sm">
+              <p className="text-gray-400">
+                No variants created
+                yet
+              </p>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Go back to add
+                product variants
+                first
               </p>
             </div>
+          )}
 
-            {/* EMPTY STATE */}
-            {(!v.inventories || v.inventories.length === 0) && (
-              <div className="text-center text-sm text-gray-500 border rounded-lg p-4 bg-gray-50">
-                No warehouse stock added yet
-              </div>
-            )}
+          {variants.map(
+            (
+              variant,
+              variantIndex
+            ) => {
+              const inventories =
+                watch(
+                  `variants.${variantIndex}.inventories`
+                ) ?? [];
 
-            {/* INVENTORY ROWS */}
-            {(v.inventories || []).map((inv, index) => (
-              <div
-                key={index}
-                className="border rounded-lg p-4 bg-gray-50 space-y-4 relative"
-              >
+              const currentVariant =
+                watch(
+                  `variants.${variantIndex}`
+                ) as ProductVariant;
 
-                {/* REMOVE */}
-                <button
-                  onClick={() => removeInventoryRow(v.id, index)}
-                  className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+              return (
+                <div
+                  key={
+                    variant.id
+                  }
+                  className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg transition-all"
                 >
-                  ✕
-                </button>
+                  {/* HEADER */}
 
-                {/* WAREHOUSE */}
-                <div>
-                  <label className="text-xs text-gray-500">
-                    Warehouse
-                  </label>
+                  <div className="border-b border-gray-200 bg-linear-to-r from-gray-50 to-white px-6 py-4">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {currentVariant?.name ||
+                        "Unnamed Variant"}
+                    </h3>
 
-                  <select
-                    value={inv.warehouseId}
-                    onChange={(e) =>
-                      updateInventory(
-                        v.id,
-                        index,
-                        "warehouseId",
-                        e.target.value
+                    <p className="mt-1 font-mono text-sm text-gray-500">
+                      SKU:{" "}
+                      {currentVariant?.sku ||
+                        "N/A"}
+                    </p>
+                  </div>
+
+                  {/* CONTENT */}
+
+                  <div className="space-y-4 p-6">
+                    {/* EMPTY */}
+
+                    {inventories.length ===
+                      0 && (
+                      <div className="rounded-lg bg-amber-50 p-6 text-center">
+                        <p className="text-sm text-amber-700">
+                          🏚️ No
+                          warehouse
+                          stock added
+                          yet
+                        </p>
+
+                        <p className="mt-1 text-xs text-amber-600">
+                          Click the
+                          button below
+                          to add
+                          inventory
+                          for this
+                          variant
+                        </p>
+                      </div>
+                    )}
+
+                    {/* INVENTORIES */}
+
+                    {inventories.map(
+                      (
+                        _,
+                        inventoryIndex
+                      ) => (
+                        <div
+                          key={
+                            inventoryIndex
+                          }
+                          className="group relative rounded-xl border border-gray-200 bg-gray-50/50 p-5 transition-all hover:border-gray-300 hover:shadow-sm"
+                        >
+                          {/* REMOVE */}
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              removeInventoryRow(
+                                variantIndex,
+                                inventoryIndex
+                              )
+                            }
+                            className="absolute right-3 top-3 rounded-md p-1 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+                            title="Remove warehouse stock"
+                          >
+                            ✕
+                          </button>
+
+                          <div className="space-y-4">
+                            {/* WAREHOUSE */}
+
+                            <div>
+                              <label className="mb-1 block text-sm font-medium text-gray-700">
+                                Warehouse
+                              </label>
+
+                              <select
+                                {...register(
+                                  `variants.${variantIndex}.inventories.${inventoryIndex}.warehouseId`
+                                )}
+                                className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200"
+                              >
+                                <option value="">
+                                  {isLoading
+                                    ? "Loading warehouses..."
+                                    : "Select warehouse"}
+                                </option>
+
+                                {warehouses.map(
+                                  (
+                                    warehouse: {
+                                      id: string;
+                                      name: string;
+                                    }
+                                  ) => (
+                                    <option
+                                      key={
+                                        warehouse.id
+                                      }
+                                      value={
+                                        warehouse.id
+                                      }
+                                    >
+                                      {
+                                        warehouse.name
+                                      }
+                                    </option>
+                                  )
+                                )}
+                              </select>
+                            </div>
+
+                            {/* GRID */}
+
+                            <div className="grid gap-4 sm:grid-cols-3">
+                              {/* STOCK */}
+
+                              <div>
+                                <label className="mb-1 block text-sm font-medium text-gray-700">
+                                  Stock
+                                  Quantity
+                                </label>
+
+                                <input
+                                  type="number"
+                                  placeholder="0"
+                                  {...register(
+                                    `variants.${variantIndex}.inventories.${inventoryIndex}.stock`,
+                                    {
+                                      valueAsNumber:
+                                        true,
+                                    }
+                                  )}
+                                  className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200"
+                                />
+                              </div>
+
+                              {/* RESERVED */}
+
+                              <div>
+                                <label className="mb-1 block text-sm font-medium text-gray-700">
+                                  Reserved
+                                  Stock
+                                </label>
+
+                                <input
+                                  type="number"
+                                  placeholder="0"
+                                  {...register(
+                                    `variants.${variantIndex}.inventories.${inventoryIndex}.reserved`,
+                                    {
+                                      valueAsNumber:
+                                        true,
+                                    }
+                                  )}
+                                  className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200"
+                                />
+                              </div>
+
+                              {/* THRESHOLD */}
+
+                              <div>
+                                <label className="mb-1 block text-sm font-medium text-gray-700">
+                                  Low Stock
+                                  Threshold
+                                </label>
+
+                                <input
+                                  type="number"
+                                  placeholder="Alert at"
+                                  {...register(
+                                    `variants.${variantIndex}.inventories.${inventoryIndex}.threshold`,
+                                    {
+                                      valueAsNumber:
+                                        true,
+                                    }
+                                  )}
+                                  className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200"
+                                />
+                              </div>
+                            </div>
+
+                            {/* AVAILABLE */}
+
+                            <div className="rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                              Available
+                              for sale:{" "}
+                              <span className="font-semibold">
+                                {getAvailableStock(
+                                  variantIndex,
+                                  inventoryIndex
+                                )}
+                              </span>{" "}
+                              units
+                            </div>
+                          </div>
+                        </div>
                       )
-                    }
-                    className="border rounded-lg p-2 w-full focus:ring-2 focus:ring-green-500"
-                  >
-                    <option value="">Select warehouse</option>
-                    {warehouses.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name}
-                      </option>
-                    ))}
-                  </select>
+                    )}
+
+                    {/* ADD */}
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        addInventoryRow(
+                          variantIndex
+                        )
+                      }
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-3 font-medium text-gray-600 transition-all hover:border-green-400 hover:bg-green-50 hover:text-green-700"
+                    >
+                      + Add warehouse
+                      stock
+                    </button>
+                  </div>
                 </div>
+              );
+            }
+          )}
+        </div>
 
-                {/* NUMBERS */}
-                <div className="grid grid-cols-3 gap-3">
+        {/* NAVIGATION */}
 
-                  <div>
-                    <label className="text-xs text-gray-500">Stock</label>
-                    <input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={inv.stock ?? ""}
-                      onChange={(e) =>
-                        updateInventory(
-                          v.id,
-                          index,
-                          "stock",
-                          toNumber(e.target.value) ?? 0
-                        )
-                      }
-                      className="border rounded-lg p-2 w-full"
-                    />
-                  </div>
+        <div className="flex items-center justify-between gap-4 rounded-2xl bg-white p-4 shadow-sm">
+          <button
+            type="button"
+            onClick={prevStep}
+            className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-6 py-2.5 font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+          >
+            ← Back
+          </button>
 
-                  <div>
-                    <label className="text-xs text-gray-500">Reserved</label>
-                    <input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={inv.reserved ?? ""}
-                      onChange={(e) =>
-                        updateInventory(
-                          v.id,
-                          index,
-                          "reserved",
-                          toNumber(e.target.value) ?? 0
-                        )
-                      }
-                      className="border rounded-lg p-2 w-full"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-gray-500">
-                      Alert Level
-                    </label>
-                    <input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={inv.threshold ?? ""}
-                      onChange={(e) =>
-                        updateInventory(
-                          v.id,
-                          index,
-                          "threshold",
-                          toNumber(e.target.value) ?? 0
-                        )
-                      }
-                      className="border rounded-lg p-2 w-full"
-                    />
-                  </div>
-
-                </div>
-              </div>
-            ))}
-
-            {/* ADD BUTTON */}
-            <button
-              onClick={() => addInventoryRow(v.id)}
-              className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"
-            >
-              + Add warehouse stock
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {/* NAVIGATION */}
-      <div className="flex justify-between pt-4 border-t">
-        <button
-          onClick={prevStep}
-          className="px-5 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg"
-        >
-          Back
-        </button>
-
-        <button
-          onClick={nextStep}
-          className="px-5 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg"
-        >
-          Continue
-        </button>
+          <button
+            type="button"
+            onClick={nextStep}
+            className="inline-flex items-center gap-2 rounded-xl bg-linear-to-r from-green-600 to-green-700 px-6 py-2.5 font-semibold text-white shadow-sm transition-all hover:scale-[1.02] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+          >
+            Continue →
+          </button>
+        </div>
       </div>
     </div>
   );
 }
+
+const StepInventory =
+  memo(
+    StepInventoryComponent
+  );
+
+export default StepInventory;

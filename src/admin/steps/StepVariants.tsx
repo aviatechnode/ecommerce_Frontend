@@ -1,294 +1,407 @@
-import { useEffect } from "react";
-import { X } from "lucide-react";
-import { useDispatch, useSelector } from "react-redux";
+import { memo } from "react";
+import { X, Plus, RefreshCw } from "lucide-react";
+import { useFormContext, useFieldArray } from "react-hook-form";
 
-import { useProductBuilder } from "../store/productBuilderStore";
+import type { ProductFormValues } from "../../types/product.form.types";
+import { useGetBrandsQuery } from "../../services/brandApi";
+import { useGetCategoriesQuery } from "../../services/categoryApi";
 import { generateSKU } from "../../client/helpers/skuGenerator";
+import type { StepProps } from "./util/stepProps";
+import type { ProductVariant } from "../store/productBuilderStore";
 
-import { fetchBrands } from "../state-management/brandSlice";
-import { fetchCategories } from "../state-management/categorySlice";
+/* =========================================================
+   COMPONENT PROPS
+========================================================= */
+interface StepVariantsProps extends StepProps {}
 
-import type { AppDispatch, RootState } from "../store/store";
-
-export default function StepVariants() {
-  const dispatch = useDispatch<AppDispatch>();
+/* =========================================================
+   COMPONENT
+========================================================= */
+function StepVariantsComponent({ nextStep, prevStep }: StepVariantsProps) {
+  /* ---------------------------------------------------------
+     React Hook Form
+  --------------------------------------------------------- */
+  const {
+    watch,
+    control,
+    register,
+    setValue,
+    formState: { errors },
+  } = useFormContext<ProductFormValues>();
 
   const {
-    variants,
-    addVariant,
-    updateVariant,
-    removeVariant,
-    nextStep,
-    prevStep,
-    product,
-  } = useProductBuilder();
+    fields: variantList,
+    append,
+    remove,
+  } = useFieldArray({
+    control,
+    name: "variants",
+  });
 
-  /* =========================================================
-     REDUX DATA
-  ========================================================= */
+  const formValues = watch();
 
-  const brands = useSelector(
-    (state: RootState) => state.brands.brands
-  );
+  /* ---------------------------------------------------------
+     API data
+  --------------------------------------------------------- */
+  const { data: brands = [] } = useGetBrandsQuery();
+  const { data: categories = [] } = useGetCategoriesQuery();
 
-  const categories = useSelector(
-    (state: RootState) => state.categories.categories
-  );
+  /* ---------------------------------------------------------
+     Derived state
+  --------------------------------------------------------- */
+  const selectedBrand = brands.find((b) => b.id === formValues.brandId);
+  const selectedCategory = categories.find((c) => c.id === formValues.categoryId);
 
-  /* =========================================================
-     LOAD DATA
-  ========================================================= */
+  /* ---------------------------------------------------------
+     Variant operations
+  --------------------------------------------------------- */
+  const addVariant = () => {
+    const index = variantList.length;
 
-  useEffect(() => {
-    dispatch(fetchBrands());
-    dispatch(fetchCategories());
-  }, [dispatch]);
+    const newVariant: ProductVariant = {
+      name: "",
+      sku: generateSKU({
+        brand: selectedBrand?.name,
+        category: selectedCategory?.name,
+        product: formValues.name,
+        variant: "",
+        index,
+        allowFallback: true,
+      }),
+      price: 0,
+      costPrice: undefined,
+      compareAtPrice: undefined,
+      weight: undefined,
+      length: undefined,
+      width: undefined,
+      height: undefined,
+      barcode: undefined,
+      isActive: true,
+      attributes: [],
+      inventories: [],
+    };
 
-  /* =========================================================
-     HELPERS
-  ========================================================= */
+    append(newVariant);
+  };
 
-  const toNumber = (value: string) => {
-    if (value === "") return undefined;
+  const regenerateSKU = (index: number) => {
+    const variantName = watch(`variants.${index}.name`) || "";
+    const newSKU = generateSKU({
+      brand: selectedBrand?.name,
+      category: selectedCategory?.name,
+      product: formValues.name,
+      variant: variantName,
+      index,
+      allowFallback: true,
+    });
+    setValue(`variants.${index}.sku`, newSKU, { shouldDirty: true });
+  };
+
+  /* ---------------------------------------------------------
+     Handle variant name change with SKU regeneration
+  --------------------------------------------------------- */
+  const handleVariantNameChange = (index: number, name: string) => {
+    setValue(`variants.${index}.name`, name, { shouldDirty: true });
+
+    // Auto-regenerate SKU when name changes
+    const newSKU = generateSKU({
+      brand: selectedBrand?.name,
+      category: selectedCategory?.name,
+      product: formValues.name,
+      variant: name,
+      index,
+      allowFallback: true,
+    });
+    setValue(`variants.${index}.sku`, newSKU, { shouldDirty: true });
+  };
+
+  /* ---------------------------------------------------------
+     Helper: convert empty string to undefined for number fields
+  --------------------------------------------------------- */
+  const toNumberOrUndefined = (value: string) => {
+    if (value === "" || value === undefined || value === null) return undefined;
     const num = Number(value);
     return isNaN(num) ? undefined : num;
   };
 
-  /* =========================================================
-     RESOLVE BRAND + CATEGORY FROM IDS
-     (IMPORTANT: product should store IDs, not objects)
-  ========================================================= */
-
-  const selectedBrand = brands.find(
-    (b) => b.id === product?.brandId
-  );
-
-  const selectedCategory = categories.find(
-    (c) => c.id === product?.categoryId
-  );
-
-  /* =========================================================
-     SKU BUILDER
-  ========================================================= */
-
-  const buildSKU = (variantName: string, index: number, allowFallback = false) => {
-    return generateSKU({
-      brand: selectedBrand?.name,
-      category: selectedCategory?.name,
-      product: product?.name,
-      variant: variantName,
-      index,
-      allowFallback,
-    });
-  };
-
-  /* =========================================================
-     UI
-  ========================================================= */
-
+  /* ---------------------------------------------------------
+     Render
+  --------------------------------------------------------- */
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen bg-linear-to-br from-gray-50 to-gray-100 p-6">
+      <div className="mx-auto max-w-5xl space-y-6">
+        {/* HEADER */}
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-white p-6 shadow-sm">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+              🎨 Product Variants
+            </h1>
+            <p className="mt-1 text-sm text-gray-500">
+              SKUs are generated automatically from your product context
+            </p>
+          </div>
 
-      {/* HEADER */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">
-            Product Variants
-          </h2>
-          <p className="text-sm text-gray-500">
-            SKUs are generated from real product context
-          </p>
-        </div>
-
-        {/* ADD VARIANT */}
-        <button
-          onClick={() => {
-            const index = variants.length;
-
-            const sku = buildSKU("", index, true);
-
-            addVariant({ sku });
-          }}
-          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow"
-        >
-          + Add Variant
-        </button>
-      </div>
-
-      {/* EMPTY STATE */}
-      {variants.length === 0 && (
-        <div className="border rounded-xl p-8 text-center text-gray-500 bg-gray-50">
-          <p className="font-medium">No variants yet</p>
-          <p className="text-sm">Click “Add Variant” to start</p>
-        </div>
-      )}
-
-      {/* VARIANTS */}
-      <div className="space-y-6">
-        {variants.map((v, index) => (
-          <div
-            key={v.id}
-            className="border rounded-xl p-5 bg-white shadow-sm space-y-5"
+          <button
+            type="button"
+            onClick={addVariant}
+            className="inline-flex items-center gap-2 rounded-xl bg-linear-to-r from-green-600 to-green-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:scale-105 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
           >
+            <Plus className="h-4 w-4" />
+            Add Variant
+          </button>
+        </div>
 
-            {/* TOP BAR */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold text-gray-700">
-                  Variant {index + 1}
-                </h3>
-                <p className="text-xs text-gray-400">
-                  Fill in product details
-                </p>
-              </div>
+        {/* EMPTY STATE */}
+        {variantList.length === 0 && (
+          <div className="rounded-2xl border border-gray-200 bg-white p-12 text-center shadow-sm transition-all">
+            <div className="mb-3 text-5xl">🛒</div>
+            <p className="text-lg font-medium text-gray-700">No variants yet</p>
+            <p className="mt-1 text-sm text-gray-500">
+              Click "Add Variant" to create product options like size, color, or style
+            </p>
+          </div>
+        )}
 
-              <button
-                onClick={() => removeVariant(v.id)}
-                className="p-1 rounded-md hover:bg-red-50 text-red-500 hover:text-red-700"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* IDENTITY */}
-            <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-gray-600">
-                Identity
-              </h4>
-
-              <input
-                placeholder="Variant name"
-                value={v.name || ""}
-                onChange={(e) => {
-                  const name = e.target.value;
-
-                  updateVariant(v.id, "name", name);
-
-                  const sku = buildSKU(name, index, true);
-                  updateVariant(v.id, "sku", sku);
-                }}
-                className="border rounded-lg p-2 w-full"
-              />
-
-              {/* SKU */}
-              <div className="flex gap-2">
-                <input
-                  value={v.sku || ""}
-                  onChange={(e) =>
-                    updateVariant(v.id, "sku", e.target.value)
-                  }
-                  className="border rounded-lg p-2 w-full"
-                />
+        {/* VARIANTS GRID */}
+        <div className="space-y-6">
+          {variantList.map((variant, index) => (
+            <div
+              key={variant.id}
+              className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg transition-all hover:shadow-xl"
+            >
+              {/* VARIANT HEADER */}
+              <div className="flex items-center justify-between border-b border-gray-200 bg-linear-to-r from-gray-50 to-white px-6 py-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Variant {index + 1}
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Configure pricing, dimensions, and inventory
+                  </p>
+                </div>
 
                 <button
                   type="button"
-                  onClick={() => {
-                    const sku = buildSKU(v.name || "", index, true);
-                    updateVariant(v.id, "sku", sku);
-                  }}
-                  className="px-3 text-xs bg-gray-100 rounded-lg hover:bg-gray-200"
+                  onClick={() => remove(index)}
+                  className="rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+                  title="Remove variant"
                 >
-                  Regenerate
+                  <X className="h-4 w-4" />
                 </button>
               </div>
-            </div>
 
-            {/* PRICING */}
-            <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-gray-600">
-                Pricing
-              </h4>
+              {/* VARIANT CONTENT */}
+              <div className="p-6 space-y-5">
+                {/* VARIANT NAME */}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Variant Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Small / Red / 128GB"
+                    {...register(`variants.${index}.name`)}
+                    onChange={(e) => handleVariantNameChange(index, e.target.value)}
+                    className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200"
+                  />
+                  <p className="mt-1 text-xs text-gray-400">
+                    A descriptive name to identify this variant
+                  </p>
+                </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* SKU WITH REGENERATE */}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    SKU (Stock Keeping Unit)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Auto-generated SKU"
+                      {...register(`variants.${index}.sku`)}
+                      className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono text-sm shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => regenerateSKU(index)}
+                      className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-200"
+                      title="Regenerate SKU"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Regenerate
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Unique identifier for inventory tracking
+                  </p>
+                </div>
 
-                <input
-                  inputMode="decimal"
-                  placeholder="Selling price"
-                  value={v.price ?? ""}
-                  onChange={(e) =>
-                    updateVariant(v.id, "price", toNumber(e.target.value))
-                  }
-                  className="border rounded-lg p-2"
-                />
+                {/* PRICING SECTION */}
+                <div className="rounded-xl bg-gray-50 p-5">
+                  <h4 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
+                    💰 Pricing
+                  </h4>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">
+                        Selling Price *
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                          $
+                        </span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          {...register(`variants.${index}.price`, {
+                            required: "Selling price is required",
+                            setValueAs: toNumberOrUndefined,
+                            min: { value: 0, message: "Price cannot be negative" },
+                          })}
+                          className="block w-full rounded-lg border border-gray-300 pl-7 pr-4 py-2.5 shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                      </div>
+                      {errors?.variants?.[index]?.price && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {errors.variants[index].price.message}
+                        </p>
+                      )}
+                    </div>
 
-                <input
-                  inputMode="decimal"
-                  placeholder="Cost price"
-                  value={v.costPrice ?? ""}
-                  onChange={(e) =>
-                    updateVariant(v.id, "costPrice", toNumber(e.target.value))
-                  }
-                  className="border rounded-lg p-2"
-                />
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">
+                        Cost Price
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                          $
+                        </span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          {...register(`variants.${index}.costPrice`, {
+                            setValueAs: toNumberOrUndefined,
+                            min: { value: 0, message: "Cost price cannot be negative" },
+                          })}
+                          className="block w-full rounded-lg border border-gray-300 pl-7 pr-4 py-2.5 shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* DIMENSIONS SECTION */}
+                <div>
+                  <h4 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500">
+                    📦 Dimensions & Weight
+                  </h4>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-500">Weight (kg)</label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        inputMode="decimal"
+                        placeholder="0.000"
+                        {...register(`variants.${index}.weight`, {
+                          setValueAs: toNumberOrUndefined,
+                          min: { value: 0, message: "Weight cannot be negative" },
+                        })}
+                        className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-500">Length (cm)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        inputMode="decimal"
+                        placeholder="0.0"
+                        {...register(`variants.${index}.length`, {
+                          setValueAs: toNumberOrUndefined,
+                          min: { value: 0, message: "Length cannot be negative" },
+                        })}
+                        className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-500">Width (cm)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        inputMode="decimal"
+                        placeholder="0.0"
+                        {...register(`variants.${index}.width`, {
+                          setValueAs: toNumberOrUndefined,
+                          min: { value: 0, message: "Width cannot be negative" },
+                        })}
+                        className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs text-gray-500">Height (cm)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        inputMode="decimal"
+                        placeholder="0.0"
+                        {...register(`variants.${index}.height`, {
+                          setValueAs: toNumberOrUndefined,
+                          min: { value: 0, message: "Height cannot be negative" },
+                        })}
+                        className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* OPTIONAL BARCODE */}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Barcode (UPC / EAN)
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Optional barcode"
+                    {...register(`variants.${index}.barcode`)}
+                    className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 font-mono shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200"
+                  />
+                </div>
               </div>
             </div>
+          ))}
+        </div>
 
-            {/* SPECIFICATIONS */}
-            <div className="space-y-3">
-              <h4 className="text-sm font-semibold text-gray-600">
-                Specifications
-              </h4>
+        {/* NAVIGATION BUTTONS */}
+        <div className="flex items-center justify-between gap-4 rounded-2xl bg-white p-4 shadow-sm">
+          <button
+            type="button"
+            onClick={prevStep}
+            className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-6 py-2.5 font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+          >
+            ← Back to Basic Info
+          </button>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-
-                <input
-                  placeholder="Weight"
-                  value={v.weight ?? ""}
-                  onChange={(e) =>
-                    updateVariant(v.id, "weight", toNumber(e.target.value))
-                  }
-                  className="border rounded-lg p-2"
-                />
-
-                <input
-                  placeholder="Length"
-                  value={v.length ?? ""}
-                  onChange={(e) =>
-                    updateVariant(v.id, "length", toNumber(e.target.value))
-                  }
-                  className="border rounded-lg p-2"
-                />
-
-                <input
-                  placeholder="Width"
-                  value={v.width ?? ""}
-                  onChange={(e) =>
-                    updateVariant(v.id, "width", toNumber(e.target.value))
-                  }
-                  className="border rounded-lg p-2"
-                />
-
-                <input
-                  placeholder="Height"
-                  value={v.height ?? ""}
-                  onChange={(e) =>
-                    updateVariant(v.id, "height", toNumber(e.target.value))
-                  }
-                  className="border rounded-lg p-2"
-                />
-              </div>
-            </div>
-
-          </div>
-        ))}
-      </div>
-
-      {/* NAVIGATION */}
-      <div className="flex justify-between pt-4 border-t">
-        <button
-          onClick={prevStep}
-          className="px-5 py-2 rounded-lg bg-gray-100"
-        >
-          Back
-        </button>
-
-        <button
-          onClick={nextStep}
-          className="px-5 py-2 rounded-lg bg-green-600 text-white"
-        >
-          Continue
-        </button>
+          <button
+            type="button"
+            onClick={nextStep}
+            className="inline-flex items-center gap-2 rounded-xl bg-linear-to-r from-green-600 to-green-700 px-6 py-2.5 font-semibold text-white shadow-sm transition-all hover:scale-[1.02] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+          >
+            Continue to Inventory →
+          </button>
+        </div>
       </div>
     </div>
   );
 }
+
+const StepVariants = memo(StepVariantsComponent);
+export default StepVariants;

@@ -1,34 +1,40 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
 import { api } from "../../api/axios";
+import type { NigerianState } from "../../shared/enums/enums";
 
 /* =========================================================
-TYPES
+TYPES (MATCH BACKEND EXACTLY)
 ========================================================= */
 
 type Address = {
   id: string;
-  street: string;
-  city: string;
-  state: string;
-  lga: string;
+  name: string;
   phone: string;
+  state: NigerianState;
+  lga: string;
+  city: string;
+  area?: string | null;
+  street: string;
+  landmark?: string | null;
+  fullAddress: string;
   isDefault?: boolean;
 };
 
 type CheckoutPayload = {
   couponCode?: string;
   addressId?: string;
+  note?: string;
   address?: {
-    type?: "DELIVERY" | "BILLING";
-    street: string;
-    city: string;
+    name: string;
+    phone: string;
     state: string;
     lga: string;
-    phone: string;
-    country?: string;
-    landmark?: string;
-    postalCode?: string;
+    city: string;
+    area?: string | null;
+    street: string;
+    landmark?: string | null;
+    isDefault?: boolean;
   };
 };
 
@@ -74,25 +80,22 @@ type CheckoutState = {
   success: boolean;
   error: string | null;
 
-  /* ORDER */
   order: CheckoutResponse["order"] | null;
   payment: CheckoutResponse["payment"] | null;
 
-  /* SHIPPING */
   shippingFee: number;
   distanceKm: number;
 
-  /* PAYMENT */
+  metrics: CheckoutResponse["metrics"] | null;
+
   paymentAuthorizationUrl: string | null;
   paymentReference: string | null;
 
-  /* ADDRESS SYSTEM (NEW) */
   selectedAddressId: string | null;
   useNewAddress: boolean;
   newAddressDraft: CheckoutPayload["address"] | null;
   savedAddresses: Address[];
 
-  /* COUPON SYSTEM (NEW) */
   couponCode: string;
   couponPreview: CouponPreview | null;
 };
@@ -102,13 +105,14 @@ HELPER
 ========================================================= */
 
 const generateIdempotencyKey = () =>
-  `checkout_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+  `checkout_${Date.now()}_${Math.random()
+    .toString(36)
+    .substring(2, 10)}`;
 
 /* =========================================================
 THUNKS
 ========================================================= */
 
-/* CHECKOUT */
 export const createCheckout = createAsyncThunk<
   CheckoutResponse,
   CheckoutPayload,
@@ -124,6 +128,11 @@ export const createCheckout = createAsyncThunk<
       withCredentials: true,
     });
 
+    // handle duplicate response format
+    if (res.data?.data) {
+      return rejectWithValue("Duplicate checkout request");
+    }
+
     return res.data;
   } catch (err: any) {
     return rejectWithValue(
@@ -132,47 +141,56 @@ export const createCheckout = createAsyncThunk<
   }
 });
 
-/* INITIALIZE PAYMENT */
 export const initializePayment = createAsyncThunk<
   InitializePaymentResponse,
   { orderId: string },
   { rejectValue: string }
->("checkout/initializePayment", async ({ orderId }, { rejectWithValue }) => {
-  try {
-    const res = await api.post(
-      "/api/payments/initialize",
-      { orderId },
-      { withCredentials: true }
-    );
+>(
+  "checkout/initializePayment",
+  async ({ orderId }, { rejectWithValue }) => {
+    try {
+      const res = await api.post(
+        "/api/payments/initialize",
+        { orderId },
+        { withCredentials: true }
+      );
 
-    return res.data;
-  } catch (err: any) {
-    return rejectWithValue(
-      err?.response?.data?.message || "Payment failed"
-    );
+      return res.data;
+    } catch (err: any) {
+      return rejectWithValue(
+        err?.response?.data?.message || "Payment failed"
+      );
+    }
   }
-});
+);
 
-/* COUPON PREVIEW (REAL-TIME UX) */
 export const previewCoupon = createAsyncThunk<
   CouponPreview,
   { code: string; orderAmount: number },
   { rejectValue: string }
->("checkout/previewCoupon", async (payload, { rejectWithValue }) => {
-  try {
-    const res = await api.post("/api/coupon/apply", payload, {
-      withCredentials: true,
-    });
+>(
+  "checkout/previewCoupon",
+  async (payload, { rejectWithValue }) => {
+    try {
+      const res = await api.post(
+        "/api/coupon/apply",
+        payload,
+        { withCredentials: true }
+      );
 
-    return {
-      valid: true,
-      discount: res.data.discount,
-      finalAmount: res.data.finalAmount,
-    };
-  } catch (err: any) {
-    return rejectWithValue(err?.response?.data?.message || "Invalid coupon");
+      return {
+        valid: true,
+        discount: res.data.discount,
+        finalAmount: res.data.finalAmount,
+        message: "Coupon applied",
+      };
+    } catch (err: any) {
+      return rejectWithValue(
+        err?.response?.data?.message || "Invalid coupon"
+      );
+    }
   }
-});
+);
 
 /* =========================================================
 INITIAL STATE
@@ -188,17 +206,16 @@ const initialState: CheckoutState = {
 
   shippingFee: 0,
   distanceKm: 0,
+  metrics: null,
 
   paymentAuthorizationUrl: null,
   paymentReference: null,
 
-  /* ADDRESS */
   selectedAddressId: null,
   useNewAddress: false,
   newAddressDraft: null,
   savedAddresses: [],
 
-  /* COUPON */
   couponCode: "",
   couponPreview: null,
 };
@@ -211,15 +228,16 @@ const checkoutSlice = createSlice({
   name: "checkout",
   initialState,
   reducers: {
-    /* RESET */
     resetCheckoutState: () => initialState,
 
     clearCheckoutError: (state) => {
       state.error = null;
     },
 
-    /* ADDRESS */
-    setSelectedAddress: (state, action: PayloadAction<string>) => {
+    setSelectedAddress: (
+      state,
+      action: PayloadAction<string>
+    ) => {
       state.selectedAddressId = action.payload;
       state.useNewAddress = false;
     },
@@ -229,16 +247,24 @@ const checkoutSlice = createSlice({
       state.selectedAddressId = null;
     },
 
-    setNewAddressDraft: (state, action: PayloadAction<any>) => {
+    setNewAddressDraft: (
+      state,
+      action: PayloadAction<CheckoutPayload["address"]>
+    ) => {
       state.newAddressDraft = action.payload;
     },
 
-    setSavedAddresses: (state, action: PayloadAction<Address[]>) => {
+    setSavedAddresses: (
+      state,
+      action: PayloadAction<Address[]>
+    ) => {
       state.savedAddresses = action.payload;
     },
 
-    /* COUPON */
-    setCouponCode: (state, action: PayloadAction<string>) => {
+    setCouponCode: (
+      state,
+      action: PayloadAction<string>
+    ) => {
       state.couponCode = action.payload;
     },
 
@@ -249,62 +275,102 @@ const checkoutSlice = createSlice({
   },
 
   extraReducers: (builder) => {
-    /* CHECKOUT */
+    /* ================= CHECKOUT ================= */
+
     builder.addCase(createCheckout.pending, (state) => {
       state.loading = true;
       state.error = null;
+      state.success = false;
     });
 
-    builder.addCase(createCheckout.fulfilled, (state, action) => {
-      state.loading = false;
-      state.success = true;
+    builder.addCase(
+      createCheckout.fulfilled,
+      (state, action) => {
+        state.loading = false;
+        state.success = true;
 
-      state.order = action.payload.order;
-      state.payment = action.payload.payment;
-      state.shippingFee = action.payload.shippingFee;
-      state.distanceKm = action.payload.distanceKm;
-    });
+        state.order = action.payload.order;
+        state.payment = action.payload.payment;
+        state.shippingFee = action.payload.shippingFee;
+        state.distanceKm = action.payload.distanceKm;
+        state.metrics = action.payload.metrics;
+      }
+    );
 
-    builder.addCase(createCheckout.rejected, (state, action) => {
-      state.loading = false;
-      state.error = action.payload || "Checkout failed";
-    });
+    builder.addCase(
+      createCheckout.rejected,
+      (state, action) => {
+        state.loading = false;
+        state.error = action.payload || "Checkout failed";
+      }
+    );
 
-    /* PAYMENT */
-    builder.addCase(initializePayment.fulfilled, (state, action) => {
-      state.paymentAuthorizationUrl = action.payload.authorization_url;
-      state.paymentReference = action.payload.reference;
-    });
+    /* ================= PAYMENT ================= */
 
-    /* COUPON */
-    builder.addCase(previewCoupon.fulfilled, (state, action) => {
-      state.couponPreview = action.payload;
-    });
+    builder.addCase(
+      initializePayment.pending,
+      (state) => {
+        state.loading = true;
+      }
+    );
 
-    builder.addCase(previewCoupon.rejected, (state, action) => {
-      state.couponPreview = {
-        valid: false,
-        discount: 0,
-        finalAmount: 0,
-        message: action.payload || "Invalid coupon",
-      };
-    });
+    builder.addCase(
+      initializePayment.fulfilled,
+      (state, action) => {
+        state.loading = false;
+        state.paymentAuthorizationUrl =
+          action.payload.authorization_url;
+        state.paymentReference =
+          action.payload.reference;
+      }
+    );
+
+    builder.addCase(
+      initializePayment.rejected,
+      (state, action) => {
+        state.loading = false;
+        state.error = action.payload || "Payment failed";
+      }
+    );
+
+    /* ================= COUPON ================= */
+
+    builder.addCase(
+      previewCoupon.pending,
+      (state) => {
+        state.couponPreview = null;
+      }
+    );
+
+    builder.addCase(
+      previewCoupon.fulfilled,
+      (state, action) => {
+        state.couponPreview = action.payload;
+      }
+    );
+
+    builder.addCase(
+      previewCoupon.rejected,
+      (state, action) => {
+        state.couponPreview = {
+          valid: false,
+          discount: 0,
+          finalAmount: 0,
+          message:
+            action.payload || "Invalid coupon",
+        };
+      }
+    );
   },
 });
-
-/* =========================================================
-EXPORTS
-========================================================= */
 
 export const {
   resetCheckoutState,
   clearCheckoutError,
-
   setSelectedAddress,
   enableNewAddress,
   setNewAddressDraft,
   setSavedAddresses,
-
   setCouponCode,
   clearCoupon,
 } = checkoutSlice.actions;

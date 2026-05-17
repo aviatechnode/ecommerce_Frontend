@@ -1,67 +1,49 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
-import type { AppDispatch, RootState } from "../../admin/store/store";
-import { fetchProduct, clearProduct } from "../../admin/state-management/productSlice";
-import { addToCart } from "../../admin/state-management/cartSlice";
 import {
   ShoppingCart, Heart, Check, Package, Tag, AlertCircle, ChevronLeft,
   Minus, Plus, Truck, ShieldCheck, RefreshCw, Star, Edit, Trash2,
   X, Info,
 } from "lucide-react";
+
+// Import RTK Query hooks
+import { useGetProductQuery, type Product } from "../../services/productApi";
+import { useAddToCartMutation } from "../../services/cartApi";
 import {
-  fetchReviews,
-  fetchRatingSummary,
-  createReview,
-  updateReview,
-  deleteReview,
-} from "../../admin/state-management/reviewSlice";
+  useGetReviewsQuery,
+  useGetRatingSummaryQuery,
+  useCreateReviewMutation,
+  useUpdateReviewMutation,
+  useDeleteReviewMutation,
+} from "../../services/reviewApi";
 
-// ==============================
-// 1. TYPES
-// ==============================
-interface Product {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  brand: { id: string; name: string } | null;
-  category: { id: string; name: string } | null;
-  oemNumbers: Array<{ oemNumber: string }>;
-  variants: Variant[];
-  medias: Media[];
-  specifications: Array<{ name: string; value: string }>;
-  productFitments: Array<{ trimId: string; notes: string | null }>;
-}
+// Import wishlist hooks
+import {
+  useGetWishlistQuery,
+  useToggleWishlistMutation,
+  useRemoveWishlistItemMutation,
+} from "../../services/wishlistApi";
 
-interface Variant {
-  id: string;
-  name: string;
-  sku: string;
-  price: number;
-  costPrice: number | null;
-  compareAtPrice?: number | null;
-  weight: number | null;
-  length: number | null;
-  width: number | null;
-  height: number | null;
-  inventories: Inventory[];
-}
+import type { ProductVariant } from "../../schemas/product.schema";
 
-interface Inventory {
-  warehouseId: string;
-  stock: number;
-  reserved: number;
-  threshold: number;
+interface ExtendedProduct extends Product {
+  brand?: { id: string; name: string } | null;
+  category?: { id: string; name: string } | null;
 }
 
 interface Media {
+  id?: string;
   url: string;
   type: "IMAGE" | "VIDEO";
   position: number;
 }
 
-// Toast notification component (inline for simplicity)
+// Helper: Calculate available stock from inventories
+const getAvailableStock = (inventories: Array<{ stock: number; reserved: number }> = []) => {
+  return inventories.reduce((sum, inv) => sum + (inv.stock - (inv.reserved || 0)), 0);
+};
+
+// Toast notification component
 const Toast = ({ message, type, onClose }: { message: string; type: "success" | "error"; onClose: () => void }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 3000);
@@ -80,50 +62,77 @@ const Toast = ({ message, type, onClose }: { message: string; type: "success" | 
 };
 
 // ==============================
-// 2. CUSTOM HOOKS (same logic, enhanced)
+// 2. CUSTOM HOOKS
 // ==============================
 
 function useProductData(productId: string | undefined) {
-  const dispatch = useDispatch<AppDispatch>();
-  const product = useSelector((state: RootState) => state.adminProducts.product) as Product | null;
-  const loading = useSelector((state: RootState) => state.adminProducts.loading);
-  const error = useSelector((state: RootState) => state.adminProducts.error);
+  const { 
+    data: product, 
+    isLoading: loading, 
+    error: productError,
+    refetch: refetchProduct
+  } = useGetProductQuery(productId || "", {
+    skip: !productId,
+  });
 
-  const reviews = useSelector((state: RootState) => state.reviews.reviews);
-  const averageRating = useSelector((state: RootState) => state.reviews.averageRating);
-  const totalReviews = useSelector((state: RootState) => state.reviews.totalReviews);
-  const reviewsLoading = useSelector((state: RootState) => state.reviews.loading);
-  const reviewsError = useSelector((state: RootState) => state.reviews.error);
+  const { 
+    data: reviews = [], 
+    isLoading: reviewsLoading, 
+    error: reviewsError,
+    refetch: refetchReviews
+  } = useGetReviewsQuery(productId || "", {
+    skip: !productId,
+  });
+
+  const {
+    data: ratingSummary,
+    refetch: refetchSummary
+  } = useGetRatingSummaryQuery(productId || "", {
+    skip: !productId,
+  });
 
   useEffect(() => {
     if (productId) {
-      dispatch(fetchProduct(productId));
-      dispatch(fetchReviews(productId));
-      dispatch(fetchRatingSummary(productId));
+      refetchProduct();
+      refetchReviews();
+      refetchSummary();
     }
-    return () => {
-      dispatch(clearProduct());
-    };
-  }, [productId, dispatch]);
+  }, [productId, refetchProduct, refetchReviews, refetchSummary]);
 
-  return { product, loading, error, reviews, averageRating, totalReviews, reviewsLoading, reviewsError };
+  const averageRating = ratingSummary?.averageRating || 0;
+  const totalReviews = ratingSummary?.totalReviews || 0;
+
+  const extendedProduct: ExtendedProduct | null = product ? {
+    ...product,
+    brand: undefined,
+    category: undefined,
+  } : null;
+
+  return { 
+    product: extendedProduct, 
+    loading, 
+    error: productError, 
+    reviews, 
+    averageRating, 
+    totalReviews, 
+    reviewsLoading, 
+    reviewsError,
+  };
 }
 
-function useVariantManager(product: Product | null) {
+function useVariantManager(product: ExtendedProduct | null) {
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
 
   const selectedVariant = useMemo(() => {
     if (!product || !selectedVariantId) return null;
-    return product.variants.find((v) => v.id === selectedVariantId) || null;
+    return product.variants?.find((v) => v.id === selectedVariantId) || null;
   }, [product, selectedVariantId]);
 
   const stockStatus = useMemo(() => {
     if (!selectedVariant?.inventories?.length) {
       return { available: false, totalStock: 0, isLowStock: false };
     }
-    const totalStock = selectedVariant.inventories.reduce(
-      (sum, inv) => sum + (inv.stock - (inv.reserved ?? 0)), 0
-    );
+    const totalStock = getAvailableStock(selectedVariant.inventories);
     return {
       available: totalStock > 0,
       totalStock,
@@ -132,18 +141,19 @@ function useVariantManager(product: Product | null) {
   }, [selectedVariant]);
 
   useEffect(() => {
-    if (product && product.variants.length && !selectedVariantId) {
-      setSelectedVariantId(product.variants[0].id);
+    if (product && product.variants?.length && !selectedVariantId) {
+      setSelectedVariantId(product.variants[0].id!);
     }
   }, [product, selectedVariantId]);
 
   return { selectedVariantId, setSelectedVariantId, selectedVariant, stockStatus };
 }
 
+// Updated: removed manual refetch – RTK Query optimistic update handles it
 function useCartActions(selectedVariantId: string | null, stockStatus: { available: boolean; totalStock: number }) {
-  const dispatch = useDispatch<AppDispatch>();
+  const [addToCart, { isLoading: adding }] = useAddToCartMutation();
+  
   const [quantity, setQuantity] = useState(1);
-  const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
@@ -156,16 +166,18 @@ function useCartActions(selectedVariantId: string | null, stockStatus: { availab
 
   const handleAddToCart = async () => {
     if (!selectedVariantId || adding || !stockStatus.available) return;
-    setAdding(true);
+    
     try {
-      await dispatch(addToCart({ variantId: selectedVariantId, quantity })).unwrap();
+      await addToCart({ 
+        variantId: selectedVariantId, 
+        quantity,
+      }).unwrap();
+      // No manual refetch – cartApi's optimistic update + invalidatesTags will update the cache
       setAdded(true);
       setToast({ message: "Added to cart!", type: "success" });
       setTimeout(() => setAdded(false), 2000);
     } catch (err: any) {
       setToast({ message: err.message || "Failed to add to cart", type: "error" });
-    } finally {
-      setAdding(false);
     }
   };
 
@@ -173,54 +185,52 @@ function useCartActions(selectedVariantId: string | null, stockStatus: { availab
 }
 
 function useReviewActions(productId: string | undefined) {
-  const dispatch = useDispatch<AppDispatch>();
+  const [createReview, { isLoading: createLoading }] = useCreateReviewMutation();
+  const [updateReview, { isLoading: updateLoading }] = useUpdateReviewMutation();
+  const [deleteReview, { isLoading: deleteLoading }] = useDeleteReviewMutation();
+  const { refetch: refetchReviews } = useGetReviewsQuery(productId || "", { skip: !productId });
+  const { refetch: refetchSummary } = useGetRatingSummaryQuery(productId || "", { skip: !productId });
+
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [submitLoading, setSubmitLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const submitLoading = createLoading || updateLoading || deleteLoading;
 
   const handleCreate = async (data: { title: string; rating: number; comment: string }) => {
     if (!productId) return;
-    setSubmitLoading(true);
     setErrorMessage(null);
     try {
-      await dispatch(createReview({ productId, ...data })).unwrap();
-      dispatch(fetchRatingSummary(productId));
+      await createReview({ productId, ...data }).unwrap();
+      await Promise.all([refetchReviews(), refetchSummary()]);
       setShowCreateForm(false);
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to create review");
-    } finally {
-      setSubmitLoading(false);
     }
   };
 
   const handleUpdate = async (reviewId: string, data: { title: string; rating: number; comment: string }) => {
-    setSubmitLoading(true);
+    if (!productId) return;
     setErrorMessage(null);
     try {
-      await dispatch(updateReview({ id: reviewId, data })).unwrap();
-      if (productId) dispatch(fetchRatingSummary(productId));
+      await updateReview({ id: reviewId, productId, data }).unwrap();
+      await Promise.all([refetchReviews(), refetchSummary()]);
       setEditingReviewId(null);
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to update review");
-    } finally {
-      setSubmitLoading(false);
     }
   };
 
   const handleDelete = async (reviewId: string) => {
     if (!productId) return;
-    setSubmitLoading(true);
     setErrorMessage(null);
     try {
-      await dispatch(deleteReview(reviewId)).unwrap();
-      dispatch(fetchRatingSummary(productId));
+      await deleteReview({ id: reviewId, productId }).unwrap();
+      await Promise.all([refetchReviews(), refetchSummary()]);
       setDeleteConfirmId(null);
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to delete review");
-    } finally {
-      setSubmitLoading(false);
     }
   };
 
@@ -237,7 +247,7 @@ function useReviewActions(productId: string | undefined) {
 }
 
 // ==============================
-// 3. HELPER COMPONENTS (modernized)
+// 3. HELPER COMPONENTS
 // ==============================
 
 const StarRatingInput = ({ rating, onChange, size = 28 }: {
@@ -343,7 +353,7 @@ const ProductImageGallery = ({ medias, mainImage, setMainImage }: {
   mainImage: string | null;
   setMainImage: (url: string) => void;
 }) => {
-  const imageMedias = medias.filter(m => m.type === "IMAGE");
+  const imageMedias = medias?.filter(m => m.type === "IMAGE") || [];
   return (
     <div className="space-y-4">
       <div className="aspect-square bg-gray-100 rounded-2xl overflow-hidden shadow-md">
@@ -373,7 +383,7 @@ const ProductImageGallery = ({ medias, mainImage, setMainImage }: {
 };
 
 const VariantSelector = ({ variants, selectedId, onChange }: {
-  variants: Variant[];
+  variants: ProductVariant[];
   selectedId: string | null;
   onChange: (id: string) => void;
 }) => (
@@ -383,7 +393,7 @@ const VariantSelector = ({ variants, selectedId, onChange }: {
       {variants.map((variant) => (
         <button
           key={variant.id}
-          onClick={() => onChange(variant.id)}
+          onClick={() => onChange(variant.id!)}
           className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
             selectedId === variant.id
               ? "border-green-600 bg-green-50 text-green-700 shadow-sm"
@@ -397,7 +407,7 @@ const VariantSelector = ({ variants, selectedId, onChange }: {
   </div>
 );
 
-// Loading skeleton for product details
+// Loading skeleton
 const ProductDetailsSkeleton = () => (
   <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div className="h-8 w-24 bg-gray-200 rounded-lg animate-pulse mb-6" />
@@ -426,21 +436,29 @@ export default function ProductDetails() {
   const { id: productId } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  // Data hooks
   const { product, loading, error, reviews, averageRating, totalReviews, reviewsLoading, reviewsError } = useProductData(productId);
   const { selectedVariantId, setSelectedVariantId, selectedVariant, stockStatus } = useVariantManager(product);
   const { quantity, adding, added, toast, setToast, increaseQty, decreaseQty, handleAddToCart } = useCartActions(selectedVariantId, stockStatus);
   const reviewActions = useReviewActions(productId);
 
-  // Local UI
+  // Wishlist hooks
+  const { data: wishlist, refetch: refetchWishlist } = useGetWishlistQuery();
+  const [toggleWishlist, { isLoading: toggleWishlistLoading }] = useToggleWishlistMutation();
+  const [removeFromWishlist, { isLoading: removeFromWishlistLoading }] = useRemoveWishlistItemMutation();
+
   const [mainImage, setMainImage] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"specs" | "fitment" | "reviews">("specs");
-  const [isWishlisted, setIsWishlisted] = useState(false);
-  const [wishlistLoading, setWishlistLoading] = useState(false);
   const [showStickyBar, setShowStickyBar] = useState(false);
   const observerRef = useRef<HTMLDivElement>(null);
 
-  // Set main image when product loads
+  // Check if product is in wishlist
+  const isInWishlist = useMemo(() => {
+    if (!wishlist?.items || !product?.id) return false;
+    return wishlist.items.some(item => item.productId === product.id);
+  }, [wishlist, product?.id]);
+
+  const wishlistLoading = toggleWishlistLoading || removeFromWishlistLoading;
+
   useEffect(() => {
     if (product) {
       const firstImage = product.medias?.find((m) => m.type === "IMAGE")?.url || null;
@@ -448,7 +466,6 @@ export default function ProductDetails() {
     }
   }, [product]);
 
-  // Intersection observer for sticky add-to-cart bar
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => setShowStickyBar(!entry.isIntersecting),
@@ -459,12 +476,26 @@ export default function ProductDetails() {
   }, []);
 
   const handleWishlistToggle = async () => {
-    setWishlistLoading(true);
-    // Simulate API call – replace with actual wishlist mutation
-    await new Promise(resolve => setTimeout(resolve, 300));
-    setIsWishlisted(!isWishlisted);
-    setToast({ message: isWishlisted ? "Removed from wishlist" : "Added to wishlist", type: "success" });
-    setWishlistLoading(false);
+    if (!product?.id) return;
+
+    try {
+      if (isInWishlist) {
+        const wishlistItem = wishlist?.items.find(item => item.productId === product.id);
+        if (wishlistItem?.id) {
+          await removeFromWishlist({ wishlistItemId: wishlistItem.id }).unwrap();
+          setToast({ message: "Removed from wishlist", type: "success" });
+        } else {
+          await removeFromWishlist({ productId: product.id }).unwrap();
+          setToast({ message: "Removed from wishlist", type: "success" });
+        }
+      } else {
+        await toggleWishlist({ productId: product.id }).unwrap();
+        setToast({ message: "Added to wishlist", type: "success" });
+      }
+      await refetchWishlist();
+    } catch (err: any) {
+      setToast({ message: err.message || "Failed to update wishlist", type: "error" });
+    }
   };
 
   const oemDisplay = useMemo(() => {
@@ -479,15 +510,13 @@ export default function ProductDetails() {
   const formatDate = (dateString: string) =>
     new Date(dateString).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
-  // Loading skeleton
   if (loading) return <ProductDetailsSkeleton />;
 
-  // Error state
   if (error || !product) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-4">
         <AlertCircle size={48} className="text-red-500" />
-        <p className="text-gray-600 text-center">{error || "Product not found"}</p>
+        <p className="text-gray-600 text-center">{(error as any)?.message || error || "Product not found"}</p>
         <button onClick={() => navigate("/")} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
           Back to Shop
         </button>
@@ -497,35 +526,28 @@ export default function ProductDetails() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Toast notifications */}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      {/* Main content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Back button with breadcrumb feel */}
         <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-gray-500 hover:text-green-600 mb-6 transition group">
           <ChevronLeft size={20} className="group-hover:-translate-x-1 transition" />
           <span>Back</span>
         </button>
 
-        {/* Product grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          {/* Left: Gallery */}
           <div className="animate-fade-in">
             <ProductImageGallery medias={product.medias || []} mainImage={mainImage} setMainImage={setMainImage} />
           </div>
 
-          {/* Right: Info with ref for sticky bar */}
           <div className="space-y-6 animate-slide-up">
-            <div ref={observerRef} className="relative -top-20" /> {/* invisible anchor for sticky detection */}
+            <div ref={observerRef} className="relative -top-20" />
 
-            {/* Badges */}
             <div className="flex flex-wrap gap-2">
-              {product.brand?.name && (
-                <span className="text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">{product.brand.name}</span>
+              {product.brandId && (
+                <span className="text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">Brand ID: {product.brandId.slice(0, 8)}</span>
               )}
-              {product.category?.name && (
-                <span className="text-xs text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">{product.category.name}</span>
+              {product.categoryId && (
+                <span className="text-xs text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">Category ID: {product.categoryId.slice(0, 8)}</span>
               )}
               {oemDisplay && (
                 <span className="text-xs text-gray-500 font-mono bg-gray-50 px-2.5 py-1 rounded-full flex items-center gap-1">
@@ -536,7 +558,6 @@ export default function ProductDetails() {
 
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900">{product.name}</h1>
 
-            {/* Rating */}
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-0.5">
                 {[1, 2, 3, 4, 5].map((star) => (
@@ -553,21 +574,18 @@ export default function ProductDetails() {
               </button>
             </div>
 
-            {/* Description */}
             {product.description && <p className="text-gray-600 leading-relaxed">{product.description}</p>}
 
-            {/* Variant selector */}
-            {product.variants.length > 1 && (
+            {product.variants && product.variants.length > 1 && (
               <VariantSelector variants={product.variants} selectedId={selectedVariantId} onChange={setSelectedVariantId} />
             )}
 
-            {/* Price & stock */}
             <div className="border-t border-b border-gray-200 py-4 space-y-3">
               <div className="flex items-baseline gap-2">
                 {selectedVariant ? (
                   <>
                     <span className="text-3xl font-bold text-green-600">₦{selectedVariant.price.toLocaleString()}</span>
-                    {selectedVariant.compareAtPrice && (
+                    {selectedVariant.compareAtPrice && selectedVariant.compareAtPrice > 0 && (
                       <span className="text-sm text-gray-400 line-through">₦{selectedVariant.compareAtPrice.toLocaleString()}</span>
                     )}
                   </>
@@ -589,19 +607,7 @@ export default function ProductDetails() {
               )}
             </div>
 
-            {/* Actions */}
             <div className="flex flex-wrap items-center gap-4">
-              {stockStatus.available && (
-                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
-                  <button onClick={decreaseQty} className="px-3 py-2 text-gray-600 hover:bg-gray-50 transition disabled:opacity-50" disabled={quantity <= 1}>
-                    <Minus size={16} />
-                  </button>
-                  <span className="w-12 text-center font-medium">{quantity}</span>
-                  <button onClick={increaseQty} className="px-3 py-2 text-gray-600 hover:bg-gray-50 transition" disabled={quantity >= stockStatus.totalStock}>
-                    <Plus size={16} />
-                  </button>
-                </div>
-              )}
               <button
                 onClick={handleAddToCart}
                 disabled={!selectedVariantId || adding || !stockStatus.available}
@@ -614,13 +620,24 @@ export default function ProductDetails() {
               <button
                 onClick={handleWishlistToggle}
                 disabled={wishlistLoading}
-                className="p-3 border border-gray-300 rounded-xl hover:bg-gray-50 transition disabled:opacity-50"
+                className="p-3 border border-gray-300 rounded-xl hover:bg-gray-50 transition disabled:opacity-50 group relative"
+                aria-label={isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
               >
-                {wishlistLoading ? <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" /> : <Heart size={20} className={isWishlisted ? "fill-red-500 text-red-500" : "text-gray-600"} />}
+                {wishlistLoading ? (
+                  <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Heart 
+                    size={20} 
+                    className={`transition-all ${
+                      isInWishlist 
+                        ? "fill-red-500 text-red-500 group-hover:scale-110" 
+                        : "text-gray-600 group-hover:text-red-500 group-hover:scale-110"
+                    }`} 
+                  />
+                )}
               </button>
             </div>
 
-            {/* Shipping info */}
             <div className="grid grid-cols-2 gap-3 pt-2">
               <div className="flex items-center gap-2 text-sm text-gray-600"><Truck size={18} className="text-green-600" /><span>Free shipping over ₦50,000</span></div>
               <div className="flex items-center gap-2 text-sm text-gray-600"><RefreshCw size={18} className="text-green-600" /><span>30-day returns</span></div>
@@ -630,16 +647,15 @@ export default function ProductDetails() {
           </div>
         </div>
 
-        {/* Tabs section */}
         <div className="mt-16 bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="border-b border-gray-200 px-6">
             <nav className="flex gap-6 overflow-x-auto custom-scrollbar">
-              {product.specifications?.length > 0 && (
+              {product.specifications && product.specifications.length > 0 && (
                 <button onClick={() => setActiveTab("specs")} className={`py-4 text-sm font-medium transition-colors whitespace-nowrap ${
                   activeTab === "specs" ? "text-green-600 border-b-2 border-green-600" : "text-gray-500 hover:text-gray-700"
                 }`}>Specifications</button>
               )}
-              {product.productFitments?.length > 0 && (
+              {product.productFitments && product.productFitments.length > 0 && (
                 <button onClick={() => setActiveTab("fitment")} className={`py-4 text-sm font-medium transition-colors whitespace-nowrap ${
                   activeTab === "fitment" ? "text-green-600 border-b-2 border-green-600" : "text-gray-500 hover:text-gray-700"
                 }`}>Vehicle Fitment</button>
@@ -651,8 +667,7 @@ export default function ProductDetails() {
           </div>
 
           <div className="p-6">
-            {/* Specifications */}
-            {activeTab === "specs" && product.specifications?.length > 0 && (
+            {activeTab === "specs" && product.specifications && product.specifications.length > 0 && (
               <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
                 {product.specifications.map((spec, idx) => (
                   <div key={idx} className="flex py-2 border-b border-gray-100">
@@ -663,8 +678,7 @@ export default function ProductDetails() {
               </dl>
             )}
 
-            {/* Fitment */}
-            {activeTab === "fitment" && product.productFitments?.length > 0 && (
+            {activeTab === "fitment" && product.productFitments && product.productFitments.length > 0 && (
               <div className="space-y-2">
                 {product.productFitments.map((fit, idx) => (
                   <div key={idx} className="flex items-start gap-2 text-sm text-gray-600 py-2 border-b border-gray-100">
@@ -675,7 +689,6 @@ export default function ProductDetails() {
               </div>
             )}
 
-            {/* Reviews */}
             {activeTab === "reviews" && (
               <div>
                 {reviewActions.showCreateForm && (
@@ -727,7 +740,7 @@ export default function ProductDetails() {
                               </div>
                               <p className="text-gray-600 mt-2">{review.comment}</p>
                               <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
-                                <span>{review.user.name}</span>
+                                <span>{review.user?.name || "Anonymous"}</span>
                                 <span>•</span>
                                 <span>{formatDate(review.createdAt)}</span>
                               </div>
@@ -755,7 +768,6 @@ export default function ProductDetails() {
         </div>
       </div>
 
-      {/* Sticky Add-to-Cart Bar (mobile/scroll) */}
       {showStickyBar && stockStatus.available && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-4 flex items-center justify-between gap-3 animate-slide-up z-40 md:hidden">
           <div>

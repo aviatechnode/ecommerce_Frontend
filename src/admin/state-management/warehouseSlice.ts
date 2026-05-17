@@ -1,15 +1,26 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { api } from "../../api/axios";
 
+/* ================= TYPES ================= */
+
+export interface WarehouseStateRef {
+  id: string;
+  name: string;
+}
+
 export interface Warehouse {
   id: string;
   name: string;
-  state: string;
+  stateId: string;
   city: string;
+  state: WarehouseStateRef;
+  routes: any[];
+  inventory: any[];
 }
 
-/* ================= STATE ================= */
-interface WarehouseState {
+/* ================= REDUX STATE ================= */
+
+interface WarehouseSliceState {
   warehouses: Warehouse[];
   byId: Record<string, Warehouse>;
   loading: boolean;
@@ -18,6 +29,7 @@ interface WarehouseState {
 }
 
 /* ================= FETCH ================= */
+
 export const fetchWarehouses = createAsyncThunk<
   Warehouse[],
   void,
@@ -25,7 +37,7 @@ export const fetchWarehouses = createAsyncThunk<
 >("warehouses/fetchAll", async (_, { rejectWithValue }) => {
   try {
     const res = await api.get("/api/warehouses");
-    return res.data;
+    return res.data as Warehouse[];
   } catch (err: any) {
     return rejectWithValue(
       err.response?.data?.message || "Error fetching warehouses"
@@ -34,7 +46,8 @@ export const fetchWarehouses = createAsyncThunk<
 });
 
 /* ================= INITIAL STATE ================= */
-const initialState: WarehouseState = {
+
+const initialState: WarehouseSliceState = {
   warehouses: [],
   byId: {},
   loading: false,
@@ -43,6 +56,7 @@ const initialState: WarehouseState = {
 };
 
 /* ================= SLICE ================= */
+
 const warehouseSlice = createSlice({
   name: "warehouses",
   initialState,
@@ -63,9 +77,8 @@ const warehouseSlice = createSlice({
         state.fetched = true;
         state.warehouses = action.payload;
 
-        // 🔥 normalize for fast lookup (important for inventory systems)
-        state.byId = action.payload.reduce((acc, w) => {
-          acc[w.id] = w;
+        state.byId = action.payload.reduce((acc, warehouse) => {
+          acc[warehouse.id] = warehouse;
           return acc;
         }, {} as Record<string, Warehouse>);
       })
@@ -81,8 +94,11 @@ export const { clearWarehouseError } = warehouseSlice.actions;
 export default warehouseSlice.reducer;
 
 /* ================= SELECTORS ================= */
-export const selectWarehouses = (state: any) =>
+
+export const selectWarehouses = (state: any): Warehouse[] =>
   state.warehouses.warehouses;
 
-export const selectWarehouseById = (id: string) => (state: any) =>
+export const selectWarehouseById =
+  (id: string) =>
+  (state: any): Warehouse | undefined =>
   state.warehouses.byId[id];

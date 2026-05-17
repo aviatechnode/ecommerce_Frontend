@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getCsrfToken } from "../lib/csrf";
+import { getCsrfToken, setCsrfToken } from "../lib/csrf";
 
 
 
@@ -17,9 +17,51 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = getCsrfToken();
 
+  console.log("CSRF TOKEN:", token);
+
+  config.headers = config.headers || {};
+
   if (token) {
     config.headers["x-csrf-token"] = token;
   }
 
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => {
+    console.log(
+      "RESPONSE CSRF HEADER:",
+      response.headers["x-csrf-token"]
+    );
+
+    console.log(
+      "RESPONSE BODY CSRF:",
+      response.data?.csrfToken
+    );
+
+    const headerToken =
+      response.headers["x-csrf-token"];
+
+    if (headerToken) {
+      setCsrfToken(headerToken);
+    }
+
+    const bodyToken =
+      response.data?.csrfToken;
+
+    if (bodyToken) {
+      setCsrfToken(bodyToken);
+    }
+
+    return response;
+  },
+  (error) => {
+    console.log(
+      "ERROR RESPONSE:",
+      error.response?.data
+    );
+
+    return Promise.reject(error);
+  }
+);

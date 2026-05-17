@@ -13,7 +13,6 @@ import {
   Settings,
 } from "lucide-react";
 
-import { useAuthStore } from "../../store/AuthStore";
 import { useNavigate } from "react-router-dom";
 
 import { useDispatch, useSelector } from "react-redux";
@@ -21,8 +20,18 @@ import type { AppDispatch, RootState } from "../../admin/store/store";
 
 import { transformCategoriesToNavbar } from "../helpers/category-helper";
 import { fetchCategories } from "../../admin/state-management/categorySlice";
-import { useWishlistCountStore } from "../../admin/store/wishlistCountStore";
-import { useCartCountStore } from "../../admin/store/cartCountStore";
+
+
+
+import {
+  useMeQuery,
+  useSignoutMutation,
+} from "../../services/authApi";
+
+import { useCartCount } from "../../admin/store/useCartCount";
+import { useWishlistCount } from "../../admin/store/useWishlistCount";
+
+
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
@@ -32,9 +41,15 @@ const Navbar = () => {
   const catRef = useRef<HTMLDivElement>(null);
   const accRef = useRef<HTMLDivElement>(null);
 
-  const { user, signout } = useAuthStore();
   const navigate = useNavigate();
 
+  /* ================= RTK QUERY AUTH ================= */
+  const { data: meData } = useMeQuery();
+  const user = meData;
+
+  const [signout] = useSignoutMutation();
+
+  /* ================= CATEGORIES ================= */
   const categories = useSelector(
     (state: RootState) => state.categories.categories
   );
@@ -49,6 +64,7 @@ const Navbar = () => {
     return transformCategoriesToNavbar(categories);
   }, [categories]);
 
+  /* ================= OUTSIDE CLICK ================= */
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (catRef.current && !catRef.current.contains(e.target as Node)) {
@@ -64,30 +80,13 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Cart icon
-  const cartItems = useSelector(
-    (state: RootState) => state.cart.cart?.items
-  );
+   /* ================= CART================= */
+  const cartCount = useCartCount();
+ 
+  /* ================= WISHLIST================= */
+  const wishListCount = useWishlistCount()
 
-  const syncCartFromItems = useCartCountStore((s) => s.syncFromItems);
-  const cartCount = useCartCountStore((s) => s.count);
-
-  useEffect(() => {
-    syncCartFromItems(cartItems?.length ?? 0);
-  }, [cartItems?.length, syncCartFromItems]);
-
-  // Wishlist
-  const wishlistItems = useSelector(
-    (state: RootState) => state.wishlist.wishlist?.items
-  );
-
-  const syncFromItems = useWishlistCountStore((s) => s.syncFromItems);
-  const count = useWishlistCountStore((s) => s.count);
-
-  useEffect(() => {
-    syncFromItems(wishlistItems?.length ?? 0);
-  }, [wishlistItems?.length, syncFromItems]);
-
+  /* ================= HANDLERS ================= */
   const handleAccountClick = async (action: string) => {
     setAccountOpen(false);
 
@@ -110,20 +109,18 @@ const Navbar = () => {
         break;
 
       case "logout":
-        await signout();
-        navigate("/");
+        await signout().unwrap(); // ✅ RTK mutation
+        navigate("/auth");
         break;
     }
   };
 
-  // Logo click handler
   const handleLogoClick = () => {
     navigate("/");
   };
 
-  // Navigation helper for icons (also closes mobile menu if open)
   const handleIconNavigation = (path: string) => {
-    setOpen(false); // close mobile menu on navigation
+    setOpen(false);
     navigate(path);
   };
 
@@ -133,19 +130,16 @@ const Navbar = () => {
       <div className="bg-green-600 text-white">
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center h-16 gap-4">
-            {/* Logo - Clickable */}
+
+            {/* LOGO */}
             <div
               onClick={handleLogoClick}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === "Enter" && handleLogoClick()}
               className="flex items-center gap-2 min-w-fit cursor-pointer"
             >
               <img
                 src="/mograce_auto_parts_cropped.avif"
                 width={36}
                 height={36}
-                className="object-contain"
                 alt="logo"
               />
               <span className="font-bold hidden md:block">
@@ -153,6 +147,7 @@ const Navbar = () => {
               </span>
             </div>
 
+            {/* SEARCH */}
             <div className="flex-1 flex justify-center">
               <div className="w-full max-w-xl flex items-center bg-white rounded-xl px-4 py-2 text-black">
                 <Search size={18} />
@@ -164,23 +159,23 @@ const Navbar = () => {
               </div>
             </div>
 
+            {/* ICONS */}
             <div className="hidden md:flex items-center gap-5 min-w-fit">
-              {/* Car Icon - Navigates to home */}
+
               <Car
                 size={20}
-                className="cursor-pointer hover:opacity-80 transition"
                 onClick={() => handleIconNavigation("/")}
+                className="cursor-pointer"
               />
 
-              {/* Wishlist Icon - Navigates to wishlist */}
               <div
-                className="relative cursor-pointer hover:opacity-80 transition"
+                className="relative cursor-pointer"
                 onClick={() => handleIconNavigation("/wishlist")}
               >
                 <Heart size={20} />
-                {count > 0 && (
+                {wishListCount > 0 && (
                   <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-1.5 rounded-full">
-                    {count}
+                    {wishListCount}
                   </span>
                 )}
               </div>
@@ -189,20 +184,20 @@ const Navbar = () => {
               <div className="relative" ref={accRef}>
                 <button
                   onClick={() => setAccountOpen(!accountOpen)}
-                  className="flex items-center gap-2 hover:opacity-80"
+                  className="flex items-center gap-2"
                 >
                   <User size={20} />
                   <span className="text-sm hidden md:block">
-                    {user ? user.name.split(" ")[0] : "Account"}
+                    {user?.name?.split(" ")[0] ?? "Account"}
                   </span>
                   <ChevronDown size={14} />
                 </button>
 
                 <div
-                  className={`absolute right-0 mt-3 w-56 bg-white text-black shadow-xl rounded-lg border border-gray-100 transition-all duration-200 ${
+                  className={`absolute right-0 mt-3 w-56 bg-white text-black shadow-xl rounded-lg transition ${
                     accountOpen
-                      ? "opacity-100 translate-y-0"
-                      : "opacity-0 translate-y-2 pointer-events-none"
+                      ? "opacity-100"
+                      : "opacity-0 pointer-events-none"
                   }`}
                 >
                   {user ? (
@@ -212,61 +207,41 @@ const Navbar = () => {
                         <p className="text-xs text-gray-500">{user.email}</p>
                       </div>
 
-                      <div className="py-1 text-sm">
-                        <button
-                          onClick={() => handleAccountClick("profile")}
-                          className="flex items-center gap-2 w-full px-4 py-2 hover:bg-gray-100"
-                        >
-                          <User size={16} /> Profile
-                        </button>
+                      <button onClick={() => handleAccountClick("profile")} className="w-full px-4 py-2 hover:bg-gray-100 flex gap-2">
+                        <User size={16} /> Profile
+                      </button>
 
-                        <button
-                          onClick={() => handleAccountClick("orders")}
-                          className="flex items-center gap-2 w-full px-4 py-2 hover:bg-gray-100"
-                        >
-                          <Package size={16} /> Orders
-                        </button>
+                      <button onClick={() => handleAccountClick("orders")} className="w-full px-4 py-2 hover:bg-gray-100 flex gap-2">
+                        <Package size={16} /> Orders
+                      </button>
 
-                        <button
-                          onClick={() => handleAccountClick("settings")}
-                          className="flex items-center gap-2 w-full px-4 py-2 hover:bg-gray-100"
-                        >
-                          <Settings size={16} /> Settings
-                        </button>
+                      <button onClick={() => handleAccountClick("settings")} className="w-full px-4 py-2 hover:bg-gray-100 flex gap-2">
+                        <Settings size={16} /> Settings
+                      </button>
 
-                        <div className="border-t my-1" />
-
-                        <button
-                          onClick={() => handleAccountClick("logout")}
-                          className="flex items-center gap-2 w-full px-4 py-2 text-red-600 hover:bg-red-50"
-                        >
-                          <LogOut size={16} /> Logout
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => handleAccountClick("logout")}
+                        className="w-full px-4 py-2 text-red-600 hover:bg-red-50 flex gap-2"
+                      >
+                        <LogOut size={16} /> Logout
+                      </button>
                     </>
                   ) : (
-                    <div className="py-2 text-sm">
-                      <button
-                        onClick={() => handleAccountClick("signin")}
-                        className="w-full px-4 py-2 text-left hover:bg-gray-100"
-                      >
+                    <>
+                      <button onClick={() => handleAccountClick("signin")} className="w-full px-4 py-2 hover:bg-gray-100">
                         Sign In
                       </button>
-
-                      <button
-                        onClick={() => handleAccountClick("signup")}
-                        className="w-full px-4 py-2 text-left hover:bg-gray-100"
-                      >
+                      <button onClick={() => handleAccountClick("signup")} className="w-full px-4 py-2 hover:bg-gray-100">
                         Create Account
                       </button>
-                    </div>
+                    </>
                   )}
                 </div>
               </div>
 
-              {/* Cart Icon - Navigates to cart */}
+              {/* CART */}
               <div
-                className="relative cursor-pointer hover:opacity-80 transition"
+                className="relative cursor-pointer"
                 onClick={() => handleIconNavigation("/cart")}
               >
                 <ShoppingCart size={22} />
@@ -278,6 +253,7 @@ const Navbar = () => {
               </div>
             </div>
 
+            {/* MOBILE MENU */}
             <div className="md:hidden ml-auto">
               <button onClick={() => setOpen(!open)}>
                 {open ? <X /> : <Menu />}

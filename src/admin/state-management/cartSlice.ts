@@ -4,12 +4,47 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import { api } from "../../api/axios";
 import type { RootState } from "../store/store";
 
-interface CartState {
-  cart: any | null;
-  totals: {
-    subtotal: number;
-    totalItems: number;
+interface CartItem {
+  id: string;
+  cartId: string;
+  variantId: string;
+  quantity: number;
+  unitPrice: number;
+
+  variant?: {
+    id: string;
+    name: string;
+    sku: string;
+    price: number;
+    product?: {
+      id: string;
+      name: string;
+      medias?: {
+        id: string;
+        url: string;
+        type: string;
+        position: number;
+      }[];
+    };
   };
+}
+
+interface Cart {
+  id: string;
+  userId: string;
+  items: CartItem[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface CartTotals {
+  subtotal: number;
+  totalItems: number;
+}
+
+interface CartState {
+  cart: Cart | null;
+  totals: CartTotals;
   shipping: number;
   grandTotal: number;
   loading: boolean;
@@ -33,7 +68,14 @@ const initialState: CartState = {
 //////////////////////////////////////////////////////////
 
 const recalculateTotals = (state: CartState) => {
-  if (!state.cart?.items) return;
+  if (!state.cart?.items) {
+    state.totals = {
+      subtotal: 0,
+      totalItems: 0,
+    };
+    state.grandTotal = Number(state.shipping || 0);
+    return;
+  }
 
   let subtotal = 0;
   let totalItems = 0;
@@ -52,7 +94,7 @@ const recalculateTotals = (state: CartState) => {
 };
 
 //////////////////////////////////////////////////////////
-// FETCH CART (ONLY INITIAL LOAD)
+// FETCH CART
 //////////////////////////////////////////////////////////
 
 export const fetchCart = createAsyncThunk(
@@ -76,7 +118,10 @@ export const fetchCart = createAsyncThunk(
 export const addToCart = createAsyncThunk(
   "cart/add",
   async (
-    data: { variantId: string; quantity: number },
+    data: {
+      variantId: string;
+      quantity: number;
+    },
     { rejectWithValue }
   ) => {
     try {
@@ -100,18 +145,18 @@ export const addToCart = createAsyncThunk(
 export const updateCartItem = createAsyncThunk(
   "cart/update",
   async (
-    { id, quantity }: { id: string; quantity: number },
+    payload: {
+      id: string;
+      quantity: number;
+    },
     { rejectWithValue }
   ) => {
     try {
-      await api.put(`/api/cart/item/${id}`, {
-        quantity,
+      await api.put(`/api/cart/item/${payload.id}`, {
+        quantity: payload.quantity,
       });
 
-      return {
-        id,
-        quantity,
-      };
+      return payload;
     } catch (err: any) {
       return rejectWithValue(
         err.response?.data?.message || "Failed to update cart"
@@ -129,7 +174,6 @@ export const removeCartItem = createAsyncThunk(
   async (id: string, { rejectWithValue }) => {
     try {
       await api.delete(`/api/cart/item/${id}`);
-
       return id;
     } catch (err: any) {
       return rejectWithValue(
@@ -148,7 +192,6 @@ export const clearCart = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       await api.delete("/api/cart/clear");
-
       return true;
     } catch (err: any) {
       return rejectWithValue(
@@ -180,30 +223,49 @@ const cartSlice = createSlice({
 
       .addCase(fetchCart.fulfilled, (state, action) => {
         state.loading = false;
+        state.error = null;
+
         state.cart = action.payload.cart;
         state.totals = action.payload.totals;
-        state.shipping = action.payload.shipping;
-        state.grandTotal = action.payload.grandTotal;
+        state.shipping = Number(action.payload.shipping || 0);
+        state.grandTotal = Number(action.payload.grandTotal || 0);
       })
 
       .addCase(fetchCart.rejected, (state, action: any) => {
         state.loading = false;
-        state.error = action.payload;
+        state.error = action.payload || "Failed to fetch cart";
       })
 
       //////////////////////////////////////////////////////////
-      // UPDATE CART ITEM (NO PAGE RELOAD)
+      // ADD TO CART
+      //////////////////////////////////////////////////////////
+
+      .addCase(addToCart.fulfilled, (state) => {
+        state.loading = false;
+        state.error = null;
+      })
+      
+      .addCase(addToCart.rejected, (state, action: any) => {
+        state.error = action.payload || "Failed to add to cart";
+      })
+
+      //////////////////////////////////////////////////////////
+      // UPDATE CART ITEM
       //////////////////////////////////////////////////////////
 
       .addCase(updateCartItem.fulfilled, (state, action) => {
         const item = state.cart?.items?.find(
-          (i: any) => i.id === action.payload.id
+          (i) => i.id === action.payload.id
         );
 
         if (item) {
           item.quantity = action.payload.quantity;
           recalculateTotals(state);
         }
+      })
+
+      .addCase(updateCartItem.rejected, (state, action: any) => {
+        state.error = action.payload || "Failed to update cart";
       })
 
       //////////////////////////////////////////////////////////
@@ -213,11 +275,15 @@ const cartSlice = createSlice({
       .addCase(removeCartItem.fulfilled, (state, action) => {
         if (state.cart?.items) {
           state.cart.items = state.cart.items.filter(
-            (item: any) => item.id !== action.payload
+            (item) => item.id !== action.payload
           );
 
           recalculateTotals(state);
         }
+      })
+
+      .addCase(removeCartItem.rejected, (state, action: any) => {
+        state.error = action.payload || "Failed to remove item";
       })
 
       //////////////////////////////////////////////////////////
@@ -236,16 +302,41 @@ const cartSlice = createSlice({
 
         state.shipping = 0;
         state.grandTotal = 0;
+        state.error = null;
+      })
+
+      .addCase(clearCart.rejected, (state, action: any) => {
+        state.error = action.payload || "Failed to clear cart";
       });
   },
 });
 
-// cartSlice.ts (add after the slice)
-export const selectCart = (state: RootState) => state.cart.cart;
-export const selectCartItems = (state: RootState) => state.cart.cart?.items ?? [];
-export const selectCartSubtotal = (state: RootState) => state.cart.totals.subtotal;
-export const selectCartTotalItems = (state: RootState) => state.cart.totals.totalItems;
-export const selectCartLoading = (state: RootState) => state.cart.loading;
-export const selectCartError = (state: RootState) => state.cart.error;
+//////////////////////////////////////////////////////////
+// SELECTORS
+//////////////////////////////////////////////////////////
+
+export const selectCart = (state: RootState) =>
+  state.cart.cart;
+
+export const selectCartItems = (state: RootState) =>
+  state.cart.cart?.items ?? [];
+
+export const selectCartSubtotal = (state: RootState) =>
+  state.cart.totals.subtotal;
+
+export const selectCartTotalItems = (state: RootState) =>
+  state.cart.totals.totalItems;
+
+export const selectCartShipping = (state: RootState) =>
+  state.cart.shipping;
+
+export const selectCartGrandTotal = (state: RootState) =>
+  state.cart.grandTotal;
+
+export const selectCartLoading = (state: RootState) =>
+  state.cart.loading;
+
+export const selectCartError = (state: RootState) =>
+  state.cart.error;
 
 export default cartSlice.reducer;
