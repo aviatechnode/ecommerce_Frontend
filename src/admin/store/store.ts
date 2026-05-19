@@ -31,6 +31,7 @@ import { reviewApi } from "../../services/reviewApi";
 import { addressApi } from "../../services/addressApi";
 import { feedbackApi } from '../../services/feedbackApi';
 import { auditLogApi } from '../../services/auditLogApi';
+import { fitmentApi } from '../../services/fitmentApi';
 
 /* ================= STORE ================= */
 
@@ -64,6 +65,7 @@ export const store = configureStore({
     [addressApi.reducerPath]: addressApi.reducer,
     [feedbackApi.reducerPath]: feedbackApi.reducer,
     [auditLogApi.reducerPath]: auditLogApi.reducer,
+    [fitmentApi.reducerPath]: fitmentApi.reducer,
   },
 
   middleware: (getDefaultMiddleware) =>
@@ -84,6 +86,7 @@ export const store = configureStore({
       addressApi.middleware,
       feedbackApi.middleware,
       auditLogApi.middleware,
+      fitmentApi.middleware,
     ),
 });
 

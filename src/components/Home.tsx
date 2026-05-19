@@ -4,8 +4,28 @@ import { fetchProducts } from "../admin/state-management/productSlice";
 import { fetchCategories } from "../admin/state-management/categorySlice";
 import type { RootState, AppDispatch } from "../admin/store/store";
 import ProductCard from "../client/components/ProductCard";
-import { Search, ChevronRight, Tag, Percent, Truck, Sparkles, Filter, X } from "lucide-react";
+import {
+  Search,
+  ChevronRight,
+  Tag,
+  Percent,
+  Truck,
+  Sparkles,
+  Filter,
+  X,
+  ChevronDown,
+  CircleStop,
+  BarChart3,
+  Zap,
+  Shirt,
+  Armchair,
+  Wind,
+  Gauge,
+  Package,
+  Car,
+} from "lucide-react";
 import { useListCouponsQuery } from "../services/couponApi";
+import type { Coupon } from "../types/coupon-types";
 
 /* =========================================================
 TYPES
@@ -16,17 +36,51 @@ interface Category {
   parentId?: string | null;
 }
 
-interface Coupon {
-  id: string;
-  code: string;
-  name: string;
-  description?: string;
-  type: string;
-  amountOff?: number;
-  percentOff?: number;
-  freeShipping?: boolean;
-  minimumOrderAmount?: number;
+interface NestedCategory extends Category {
+  children: NestedCategory[];
+  icon: React.ReactNode;
 }
+
+/* =========================================================
+HELPERS: Category Tree & Icons
+========================================================= */
+const getCategoryIcon = (name: string): React.ReactNode => {
+  const icons: Record<string, React.ReactNode> = {
+    Engine: <Car size={16} className="text-emerald-600" />,
+    Brakes: <CircleStop size={16} className="text-emerald-600" />,
+    Suspension: <BarChart3 size={16} className="text-emerald-600" />,
+    Electrical: <Zap size={16} className="text-emerald-600" />,
+    Body: <Shirt size={16} className="text-emerald-600" />,
+    Interior: <Armchair size={16} className="text-emerald-600" />,
+    Exhaust: <Wind size={16} className="text-emerald-600" />,
+    Transmission: <Gauge size={16} className="text-emerald-600" />,
+  };
+  return icons[name] || <Package size={16} className="text-emerald-600" />;
+};
+
+const buildCategoryTree = (flatCategories: Category[]): NestedCategory[] => {
+  const map = new Map<string, NestedCategory>();
+  const roots: NestedCategory[] = [];
+
+  flatCategories.forEach((cat) => {
+    map.set(cat.id, {
+      ...cat,
+      children: [],
+      icon: getCategoryIcon(cat.name),
+    });
+  });
+
+  flatCategories.forEach((cat) => {
+    const node = map.get(cat.id)!;
+    if (cat.parentId && map.has(cat.parentId)) {
+      map.get(cat.parentId)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+
+  return roots;
+};
 
 /* =========================================================
 CAROUSEL COMPONENT
@@ -35,13 +89,27 @@ const HeroCarousel = ({ products }: { products: any[] }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
 
-  // Use first 5 products for carousel slides, or fallback images
   const slides = useMemo(() => {
     if (products.length === 0) {
       return [
-        { id: "1", title: "Premium Auto Parts", subtitle: "Quality you can trust", image: "/api/placeholder/1200/400" },
-        { id: "2", title: "Special Offers", subtitle: "Up to 30% off", image: "/api/placeholder/1200/400" },
-        { id: "3", title: "Free Shipping", subtitle: "On orders over $50", image: "/api/placeholder/1200/400" },
+        {
+          id: "1",
+          title: "Premium Auto Parts",
+          subtitle: "Quality you can trust",
+          image: "/api/placeholder/1200/400",
+        },
+        {
+          id: "2",
+          title: "Special Offers",
+          subtitle: "Up to 30% off",
+          image: "/api/placeholder/1200/400",
+        },
+        {
+          id: "3",
+          title: "Free Shipping",
+          subtitle: "On orders over $50",
+          image: "/api/placeholder/1200/400",
+        },
       ];
     }
     return products.slice(0, 5).map((p) => ({
@@ -87,8 +155,12 @@ const HeroCarousel = ({ products }: { products: any[] }) => {
             />
             <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent flex items-center">
               <div className="text-white p-6 md:p-10 max-w-lg">
-                <h2 className="text-2xl md:text-4xl font-bold mb-2">{slide.title}</h2>
-                <p className="text-sm md:text-base text-gray-200 mb-4">{slide.subtitle}</p>
+                <h2 className="text-2xl md:text-4xl font-bold mb-2">
+                  {slide.title}
+                </h2>
+                <p className="text-sm md:text-base text-gray-200 mb-4">
+                  {slide.subtitle}
+                </p>
                 <button className="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-full text-sm font-semibold transition">
                   Shop Now →
                 </button>
@@ -98,7 +170,6 @@ const HeroCarousel = ({ products }: { products: any[] }) => {
         ))}
       </div>
 
-      {/* Navigation Buttons */}
       <button
         onClick={prevSlide}
         className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/30 hover:bg-white/50 backdrop-blur-sm rounded-full p-2 transition"
@@ -112,7 +183,6 @@ const HeroCarousel = ({ products }: { products: any[] }) => {
         <ChevronRight className="w-5 h-5" />
       </button>
 
-      {/* Dots */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
         {slides.map((_, idx) => (
           <button
@@ -150,7 +220,69 @@ const ProductGridSkeleton = () => (
 );
 
 /* =========================================================
-SIDEBAR COMPONENT
+CATEGORY TREE NODE (Recursive)
+========================================================= */
+const CategoryTreeNode = ({
+  category,
+  selectedCategory,
+  onSelectCategory,
+}: {
+  category: NestedCategory;
+  selectedCategory: string | null;
+  onSelectCategory: (id: string | null) => void;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const hasChildren = category.children.length > 0;
+
+  return (
+    <div>
+      <button
+        onClick={() => {
+          if (hasChildren) {
+            setIsOpen(!isOpen);
+          } else {
+            onSelectCategory(category.id);
+          }
+        }}
+        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition flex items-center gap-2 ${
+          selectedCategory === category.id
+            ? "bg-green-50 text-green-700 font-medium border-l-4 border-green-600"
+            : "text-gray-600 hover:bg-gray-50"
+        }`}
+      >
+        {category.icon}
+        <span className="flex-1">{category.name}</span>
+        {hasChildren && (
+          <ChevronDown
+            size={14}
+            className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
+          />
+        )}
+      </button>
+      {hasChildren && isOpen && (
+        <div className="ml-6 pl-2 border-l border-gray-200 space-y-1">
+          {category.children.map((child) => (
+            <button
+              key={child.id}
+              onClick={() => onSelectCategory(child.id)}
+              className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition flex items-center gap-2 ${
+                selectedCategory === child.id
+                  ? "text-green-700 font-medium"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+              {child.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* =========================================================
+SIDEBAR COMPONENT (with category tree)
 ========================================================= */
 const Sidebar = ({
   categories,
@@ -165,15 +297,35 @@ const Sidebar = ({
   coupons: Coupon[];
   couponsLoading: boolean;
 }) => {
+  const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
+
   const specialOffers = [
-    { id: "1", title: "Free Shipping", description: "On orders over $50", icon: Truck, color: "bg-blue-100 text-blue-700" },
-    { id: "2", title: "10% Off First Order", description: "Use code: WELCOME10", icon: Percent, color: "bg-purple-100 text-purple-700" },
-    { id: "3", title: "Buy 2 Get 1 Free", description: "Selected items only", icon: Sparkles, color: "bg-amber-100 text-amber-700" },
+    {
+      id: "1",
+      title: "Free Shipping",
+      description: "On orders over $50",
+      icon: Truck,
+      color: "bg-blue-100 text-blue-700",
+    },
+    {
+      id: "2",
+      title: "10% Off First Order",
+      description: "Use code: WELCOME10",
+      icon: Percent,
+      color: "bg-purple-100 text-purple-700",
+    },
+    {
+      id: "3",
+      title: "Buy 2 Get 1 Free",
+      description: "Selected items only",
+      icon: Sparkles,
+      color: "bg-amber-100 text-amber-700",
+    },
   ];
 
   return (
     <aside className="space-y-6">
-      {/* Categories Section */}
+      {/* Categories Section with Tree */}
       <div className="bg-white rounded-xl shadow-sm p-4">
         <h3 className="font-bold text-lg text-gray-800 mb-3 flex items-center gap-2">
           <Tag size={18} className="text-green-600" />
@@ -190,18 +342,13 @@ const Sidebar = ({
           >
             All Products
           </button>
-          {categories.map((cat) => (
-            <button
+          {categoryTree.map((cat) => (
+            <CategoryTreeNode
               key={cat.id}
-              onClick={() => onSelectCategory(cat.id)}
-              className={`w-full text-left px-3 py-2 rounded-lg text-sm transition ${
-                selectedCategory === cat.id
-                  ? "bg-green-50 text-green-700 font-medium border-l-4 border-green-600"
-                  : "text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              {cat.name}
-            </button>
+              category={cat}
+              selectedCategory={selectedCategory}
+              onSelectCategory={onSelectCategory}
+            />
           ))}
         </div>
       </div>
@@ -214,12 +361,17 @@ const Sidebar = ({
         </h3>
         <div className="space-y-3">
           {specialOffers.map((offer) => (
-            <div key={offer.id} className="flex items-start gap-3 p-2 rounded-lg bg-gray-50">
+            <div
+              key={offer.id}
+              className="flex items-start gap-3 p-2 rounded-lg bg-gray-50"
+            >
               <div className={`p-2 rounded-full ${offer.color}`}>
                 <offer.icon size={16} />
               </div>
               <div>
-                <p className="font-semibold text-sm text-gray-800">{offer.title}</p>
+                <p className="font-semibold text-sm text-gray-800">
+                  {offer.title}
+                </p>
                 <p className="text-xs text-gray-500">{offer.description}</p>
               </div>
             </div>
@@ -239,14 +391,21 @@ const Sidebar = ({
             <div className="h-16 bg-gray-100 rounded-lg animate-pulse" />
           </div>
         ) : coupons.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-4">No active coupons at the moment</p>
+          <p className="text-sm text-gray-500 text-center py-4">
+            No active coupons at the moment
+          </p>
         ) : (
           <div className="space-y-3">
             {coupons.slice(0, 3).map((coupon) => (
-              <div key={coupon.id} className="border border-dashed border-green-200 rounded-lg p-3 bg-green-50">
+              <div
+                key={coupon.id}
+                className="border border-dashed border-green-200 rounded-lg p-3 bg-green-50"
+              >
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="font-mono font-bold text-green-700 text-sm">{coupon.code}</p>
+                    <p className="font-mono font-bold text-green-700 text-sm">
+                      {coupon.code}
+                    </p>
                     <p className="text-xs text-gray-600 mt-1">{coupon.name}</p>
                   </div>
                   <button
@@ -257,10 +416,14 @@ const Sidebar = ({
                   </button>
                 </div>
                 {coupon.description && (
-                  <p className="text-xs text-gray-500 mt-2">{coupon.description}</p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {coupon.description}
+                  </p>
                 )}
                 {coupon.minimumOrderAmount && (
-                  <p className="text-xs text-gray-400 mt-1">Min. order: ${coupon.minimumOrderAmount}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Min. order: ${coupon.minimumOrderAmount}
+                  </p>
                 )}
               </div>
             ))}
@@ -276,8 +439,12 @@ MAIN HOME COMPONENT
 ========================================================= */
 export default function Home() {
   const dispatch = useDispatch<AppDispatch>();
-  const { products, loading, error } = useSelector((state: RootState) => state.adminProducts);
-  const { categories: categoryList } = useSelector((state: RootState) => state.categories);
+  const { products, loading, error } = useSelector(
+    (state: RootState) => state.adminProducts
+  );
+  const { categories: categoryList } = useSelector(
+    (state: RootState) => state.categories
+  );
 
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -315,31 +482,41 @@ export default function Home() {
     return filtered;
   }, [products, debouncedSearch, selectedCategory]);
 
-  // Related products: products from the same category as the first product (if any) OR most popular category
+  // Related products
   const relatedProducts = useMemo(() => {
     if (products.length === 0) return [];
     let targetCategoryId = selectedCategory;
     if (!targetCategoryId) {
-      // Find the category with most products
       const categoryCount = new Map<string, number>();
       products.forEach((p) => {
         if (p.category?.id) {
-          categoryCount.set(p.category.id, (categoryCount.get(p.category.id) || 0) + 1);
+          categoryCount.set(
+            p.category.id,
+            (categoryCount.get(p.category.id) || 0) + 1
+          );
         }
       });
       if (categoryCount.size > 0) {
-        targetCategoryId = Array.from(categoryCount.entries()).sort((a, b) => b[1] - a[1])[0][0];
+        targetCategoryId = Array.from(categoryCount.entries()).sort(
+          (a, b) => b[1] - a[1]
+        )[0][0];
       }
     }
     if (!targetCategoryId) return [];
-    return products.filter((p) => p.category?.id === targetCategoryId && p.id !== filteredProducts[0]?.id).slice(0, 6);
+    return products
+      .filter(
+        (p) =>
+          p.category?.id === targetCategoryId && p.id !== filteredProducts[0]?.id
+      )
+      .slice(0, 6);
   }, [products, selectedCategory, filteredProducts]);
 
-  // Recommended products: based on stock or random selection
+  // Recommended products
   const recommendedProducts = useMemo(() => {
     if (products.length === 0) return [];
-    // Simulate recommendation: products with higher stock first, then shuffle remainder
-    const withStock = products.filter((p) => p.variants?.[0]?.inventories?.[0]?.stock > 5);
+    const withStock = products.filter(
+      (p) => p.variants?.[0]?.inventories?.[0]?.stock > 5
+    );
     const withoutStock = products.filter((p) => !withStock.includes(p));
     const sorted = [...withStock, ...withoutStock];
     return sorted.slice(0, 6);
@@ -382,11 +559,23 @@ export default function Home() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full text-center">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg
+              className="w-8 h-8 text-red-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Unable to load products</h2>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            Unable to load products
+          </h2>
           <p className="text-gray-500 mb-6">{error}</p>
           <button
             onClick={() => dispatch(fetchProducts())}
@@ -415,7 +604,9 @@ export default function Home() {
 
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Sidebar - hidden on mobile unless toggled */}
-          <div className={`${showMobileFilters ? "block" : "hidden"} lg:block lg:w-80 flex-shrink-0`}>
+          <div
+            className={`${showMobileFilters ? "block" : "hidden"} lg:block lg:w-80 flex-shrink-0`}
+          >
             <Sidebar
               categories={categoryList}
               selectedCategory={selectedCategory}
@@ -480,8 +671,13 @@ export default function Home() {
                     <Search size={32} className="text-gray-400" />
                   </div>
                   <h3 className="text-lg font-medium text-gray-900 mb-1">No products found</h3>
-                  <p className="text-gray-500">Try adjusting your search or browse our categories.</p>
-                  <button onClick={clearFilters} className="mt-4 text-green-600 hover:text-green-700 font-medium">
+                  <p className="text-gray-500">
+                    Try adjusting your search or browse our categories.
+                  </p>
+                  <button
+                    onClick={clearFilters}
+                    className="mt-4 text-green-600 hover:text-green-700 font-medium"
+                  >
                     Clear all filters
                   </button>
                 </div>
@@ -499,7 +695,9 @@ export default function Home() {
               <section>
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-1 h-6 bg-green-600 rounded-full" />
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">You May Also Like</h2>
+                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">
+                    You May Also Like
+                  </h2>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
                   {relatedProducts.slice(0, 4).map((product) => (
@@ -514,7 +712,9 @@ export default function Home() {
               <section>
                 <div className="flex items-center gap-2 mb-4">
                   <Sparkles size={20} className="text-amber-500" />
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">Recommended For You</h2>
+                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">
+                    Recommended For You
+                  </h2>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
                   {recommendedProducts.slice(0, 4).map((product) => (

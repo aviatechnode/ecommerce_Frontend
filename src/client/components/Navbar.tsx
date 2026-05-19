@@ -11,6 +11,10 @@ import {
   LogOut,
   Package,
   Settings,
+  Info,
+  Mail,
+  LogIn,
+  UserPlus,
 } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
@@ -21,8 +25,6 @@ import type { AppDispatch, RootState } from "../../admin/store/store";
 import { transformCategoriesToNavbar } from "../helpers/category-helper";
 import { fetchCategories } from "../../admin/state-management/categorySlice";
 
-
-
 import {
   useMeQuery,
   useSignoutMutation,
@@ -30,8 +32,6 @@ import {
 
 import { useCartCount } from "../../admin/store/useCartCount";
 import { useWishlistCount } from "../../admin/store/useWishlistCount";
-
-
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
@@ -43,17 +43,13 @@ const Navbar = () => {
 
   const navigate = useNavigate();
 
-  /* ================= RTK QUERY AUTH ================= */
   const { data: meData } = useMeQuery();
   const user = meData;
-
   const [signout] = useSignoutMutation();
 
-  /* ================= CATEGORIES ================= */
   const categories = useSelector(
     (state: RootState) => state.categories.categories
   );
-
   const dispatch = useDispatch<AppDispatch>();
 
   useEffect(() => {
@@ -64,239 +60,262 @@ const Navbar = () => {
     return transformCategoriesToNavbar(categories);
   }, [categories]);
 
-  /* ================= OUTSIDE CLICK ================= */
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (catRef.current && !catRef.current.contains(e.target as Node)) {
         setCatOpen(false);
       }
-
       if (accRef.current && !accRef.current.contains(e.target as Node)) {
         setAccountOpen(false);
       }
     };
-
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-   /* ================= CART================= */
   const cartCount = useCartCount();
- 
-  /* ================= WISHLIST================= */
-  const wishListCount = useWishlistCount()
+  const wishListCount = useWishlistCount();
 
-  /* ================= HANDLERS ================= */
   const handleAccountClick = async (action: string) => {
     setAccountOpen(false);
-
     switch (action) {
       case "signin":
       case "signup":
         navigate("/auth");
         break;
-
       case "profile":
         navigate("/profile");
         break;
-
       case "orders":
         navigate("/orders");
         break;
-
       case "settings":
         navigate("/settings");
         break;
-
       case "logout":
-        await signout().unwrap(); // ✅ RTK mutation
+        await signout().unwrap();
         navigate("/auth");
         break;
     }
   };
 
-  const handleLogoClick = () => {
-    navigate("/");
-  };
-
+  const handleLogoClick = () => navigate("/");
   const handleIconNavigation = (path: string) => {
     setOpen(false);
     navigate(path);
   };
 
   return (
-    <nav className="w-full sticky top-0 z-50">
-      {/* ================= TOP BAR ================= */}
-      <div className="bg-green-600 text-white">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center h-16 gap-4">
-
+    <nav className="w-full sticky top-0 z-50 font-sans">
+      {/* ================= MAIN NAVBAR - GLASS MODERN ================= */}
+      <div className="bg-white/95 backdrop-blur-xl shadow-lg border-b border-gray-100 relative z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between h-16 gap-4">
             {/* LOGO */}
             <div
               onClick={handleLogoClick}
-              className="flex items-center gap-2 min-w-fit cursor-pointer"
+              className="flex items-center gap-2 cursor-pointer group shrink-0"
             >
               <img
                 src="/mograce_auto_parts_cropped.avif"
                 width={36}
                 height={36}
                 alt="logo"
+                className="transition-transform duration-300 group-hover:scale-105"
               />
-              <span className="font-bold hidden md:block">
+              <span className="font-bold text-gray-800 hidden md:block tracking-tight">
                 MOgrace Auto Parts
               </span>
             </div>
 
-            {/* SEARCH */}
-            <div className="flex-1 flex justify-center">
-              <div className="w-full max-w-xl flex items-center bg-white rounded-xl px-4 py-2 text-black">
-                <Search size={18} />
+            {/* SEARCH BAR */}
+            <div className="flex-1 max-w-2xl mx-4">
+              <div className="relative group">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <input
                   type="text"
-                  placeholder="Search parts..."
-                  className="outline-none px-3 w-full text-sm bg-transparent"
+                  placeholder="Search for parts, brands, or categories..."
+                  className="w-full bg-gray-50 border border-gray-200 rounded-2xl py-2.5 pl-11 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                 />
               </div>
             </div>
 
-            {/* ICONS */}
-            <div className="hidden md:flex items-center gap-5 min-w-fit">
-
+            {/* DESKTOP ICONS */}
+            <div className="hidden md:flex items-center gap-5">
               <Car
                 size={20}
                 onClick={() => handleIconNavigation("/")}
-                className="cursor-pointer"
+                className="cursor-pointer text-gray-600 hover:text-emerald-600 transition-all hover:scale-110"
               />
 
               <div
-                className="relative cursor-pointer"
+                className="relative cursor-pointer text-gray-600 hover:text-emerald-600 transition-all hover:scale-110"
                 onClick={() => handleIconNavigation("/wishlist")}
               >
                 <Heart size={20} />
                 {wishListCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-1.5 rounded-full">
+                  <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-xs px-1.5 rounded-full shadow-md">
                     {wishListCount}
                   </span>
                 )}
               </div>
 
-              {/* ACCOUNT */}
+              {/* ACCOUNT DROPDOWN - FIXED Z-INDEX */}
               <div className="relative" ref={accRef}>
                 <button
                   onClick={() => setAccountOpen(!accountOpen)}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 text-gray-600 hover:text-emerald-600 transition-colors"
                 >
                   <User size={20} />
-                  <span className="text-sm hidden md:block">
+                  <span className="text-sm">
                     {user?.name?.split(" ")[0] ?? "Account"}
                   </span>
-                  <ChevronDown size={14} />
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-200 ${
+                      accountOpen ? "rotate-180" : ""
+                    }`}
+                  />
                 </button>
 
+                {/* Dropdown with higher z-index */}
                 <div
-                  className={`absolute right-0 mt-3 w-56 bg-white text-black shadow-xl rounded-lg transition ${
+                  className={`absolute right-0 mt-3 w-64 bg-white/90 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-100 overflow-hidden transition-all duration-200 z-[100] ${
                     accountOpen
-                      ? "opacity-100"
-                      : "opacity-0 pointer-events-none"
+                      ? "opacity-100 translate-y-0"
+                      : "opacity-0 -translate-y-2 pointer-events-none"
                   }`}
                 >
                   {user ? (
                     <>
-                      <div className="px-4 py-3 border-b">
-                        <p className="text-sm font-semibold">{user.name}</p>
+                      <div className="px-4 py-3 bg-gradient-to-r from-emerald-50 to-white border-b border-gray-100">
+                        <p className="text-sm font-semibold text-gray-800">{user.name}</p>
                         <p className="text-xs text-gray-500">{user.email}</p>
                       </div>
-
-                      <button onClick={() => handleAccountClick("profile")} className="w-full px-4 py-2 hover:bg-gray-100 flex gap-2">
+                      <button
+                        onClick={() => handleAccountClick("profile")}
+                        className="w-full px-4 py-2.5 hover:bg-gray-50 flex gap-2 items-center text-sm"
+                      >
                         <User size={16} /> Profile
                       </button>
-
-                      <button onClick={() => handleAccountClick("orders")} className="w-full px-4 py-2 hover:bg-gray-100 flex gap-2">
+                      <button
+                        onClick={() => handleAccountClick("orders")}
+                        className="w-full px-4 py-2.5 hover:bg-gray-50 flex gap-2 items-center text-sm"
+                      >
                         <Package size={16} /> Orders
                       </button>
-
-                      <button onClick={() => handleAccountClick("settings")} className="w-full px-4 py-2 hover:bg-gray-100 flex gap-2">
+                      <button
+                        onClick={() => handleAccountClick("settings")}
+                        className="w-full px-4 py-2.5 hover:bg-gray-50 flex gap-2 items-center text-sm"
+                      >
                         <Settings size={16} /> Settings
                       </button>
-
                       <button
                         onClick={() => handleAccountClick("logout")}
-                        className="w-full px-4 py-2 text-red-600 hover:bg-red-50 flex gap-2"
+                        className="w-full px-4 py-2.5 text-rose-600 hover:bg-rose-50 flex gap-2 items-center text-sm border-t border-gray-100"
                       >
                         <LogOut size={16} /> Logout
                       </button>
                     </>
                   ) : (
                     <>
-                      <button onClick={() => handleAccountClick("signin")} className="w-full px-4 py-2 hover:bg-gray-100">
-                        Sign In
+                      <button
+                        onClick={() => handleAccountClick("signin")}
+                        className="w-full px-4 py-3 hover:bg-gray-50 flex gap-2 items-center text-sm font-medium"
+                      >
+                        <LogIn size={16} /> Sign In
                       </button>
-                      <button onClick={() => handleAccountClick("signup")} className="w-full px-4 py-2 hover:bg-gray-100">
-                        Create Account
+                      <button
+                        onClick={() => handleAccountClick("signup")}
+                        className="w-full px-4 py-3 hover:bg-gray-50 flex gap-2 items-center text-sm font-medium border-t border-gray-100"
+                      >
+                        <UserPlus size={16} /> Create Account
                       </button>
                     </>
                   )}
                 </div>
               </div>
 
-              {/* CART */}
+              {/* CART - ALWAYS SHOW BADGE (including 0) */}
               <div
-                className="relative cursor-pointer"
+                className="relative cursor-pointer text-gray-600 hover:text-emerald-600 transition-all hover:scale-110"
                 onClick={() => handleIconNavigation("/cart")}
               >
                 <ShoppingCart size={22} />
-                {cartCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-1.5 rounded-full">
-                    {cartCount}
-                  </span>
-                )}
+                <span className="absolute -top-2 -right-2 bg-amber-500 text-white text-xs px-1.5 rounded-full shadow-md">
+                  {cartCount}
+                </span>
               </div>
             </div>
 
-            {/* MOBILE MENU */}
-            <div className="md:hidden ml-auto">
-              <button onClick={() => setOpen(!open)}>
-                {open ? <X /> : <Menu />}
+            {/* MOBILE BUTTON */}
+            <div className="md:hidden">
+              <button
+                onClick={() => setOpen(!open)}
+                className="p-2 rounded-full hover:bg-gray-100 transition"
+              >
+                {open ? <X size={22} /> : <Menu size={22} />}
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ================= SECOND BAR ================= */}
-      <div className="bg-green-700 text-white border-t border-green-500/30">
-        <div className="max-w-7xl mx-auto px-4 relative" ref={catRef}>
-          <div className="flex items-center h-12">
+      {/* ================= CATEGORIES BAR - LOWER Z-INDEX ================= */}
+      <div className="bg-white border-b border-gray-100 shadow-sm relative z-40" ref={catRef}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between h-12">
             <button
               onClick={() => setCatOpen(!catOpen)}
-              className="flex items-center gap-2 bg-green-800 px-4 py-2 rounded-lg hover:bg-green-900"
+              className="flex items-center gap-2 text-gray-700 hover:text-emerald-600 transition-colors"
             >
               <Menu size={18} />
-              <span>Categories</span>
-              <ChevronDown size={16} />
+              <span className="text-sm font-medium">Categories</span>
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-200 ${
+                  catOpen ? "rotate-180" : ""
+                }`}
+              />
             </button>
+
+            <div className="hidden md:flex items-center gap-6 text-sm text-gray-600">
+              <button
+                onClick={() => navigate("/about")}
+                className="flex items-center gap-1.5 hover:text-emerald-600 transition-colors"
+              >
+                <Info size={16} /> About
+              </button>
+              <button
+                onClick={() => navigate("/contact")}
+                className="flex items-center gap-1.5 hover:text-emerald-600 transition-colors"
+              >
+                <Mail size={16} /> Contact Us
+              </button>
+            </div>
+            <div className="w-20 invisible md:visible"></div>
           </div>
 
-          {/* ================= MEGA MENU ================= */}
+          {/* MEGA MENU - also ensure it's above other content but below account dropdown if needed */}
           <div
-            className={`absolute left-0 top-12 w-full bg-white text-black shadow-xl transition ${
-              catOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+            className={`absolute left-0 top-full w-full bg-white/95 backdrop-blur-md shadow-2xl rounded-b-2xl border-t border-gray-100 transition-all duration-300 origin-top z-50 ${
+              catOpen
+                ? "opacity-100 scale-y-100"
+                : "opacity-0 scale-y-0 pointer-events-none"
             }`}
           >
             <div className="max-w-7xl mx-auto p-6">
-              {/* SCROLLABLE AREA */}
               <div className="max-h-[70vh] overflow-y-auto custom-scrollbar grid grid-cols-1 md:grid-cols-4 gap-6">
                 {navbarCategories.map((cat, i) => (
-                  <div key={i}>
-                    <div className="flex items-center gap-2 font-semibold mb-2">
+                  <div key={i} className="group">
+                    <div className="flex items-center gap-2 font-semibold mb-2 text-emerald-700 border-b border-emerald-100 pb-1">
                       {cat.icon} {cat.title}
                     </div>
-
-                    <div className="flex flex-col gap-1 text-sm">
+                    <div className="flex flex-col gap-1.5 text-sm text-gray-600">
                       {cat.items.map((item, idx) => (
                         <span
                           key={idx}
-                          className="hover:text-green-600 cursor-pointer"
+                          className="hover:text-emerald-600 cursor-pointer transition-colors w-fit"
                         >
                           {item}
                         </span>
@@ -310,67 +329,104 @@ const Navbar = () => {
         </div>
       </div>
 
-      {/* ================= MOBILE MENU ================= */}
+      {/* ================= MODERN MOBILE MENU ================= */}
       <div
-        className={`md:hidden bg-green-600 text-white transition-max-h duration-300 overflow-hidden ${
-          open ? "max-h-96" : "max-h-0"
+        className={`md:hidden fixed top-[calc(4rem+48px)] left-0 right-0 bg-white/95 backdrop-blur-xl shadow-2xl rounded-b-2xl transition-all duration-300 z-[60] ${
+          open ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0 pointer-events-none"
         }`}
       >
-        <div className="px-4 py-3 flex flex-col gap-3">
-          <span>Deals</span>
-          <span>New</span>
-          <span>Brands</span>
-        </div>
-
-        <div className="px-4 py-3 border-t border-green-500/30 flex flex-col gap-4">
-          {/* Mobile Icons with Navigation */}
-          <div className="flex gap-4">
+        <div className="p-5 flex flex-col gap-5">
+          {/* Icons row */}
+          <div className="flex justify-around pb-3 border-b border-gray-100">
             <Car
-              size={20}
-              className="cursor-pointer hover:opacity-80"
+              size={24}
+              className="text-gray-600 hover:text-emerald-600 cursor-pointer transition"
               onClick={() => handleIconNavigation("/")}
             />
             <Heart
-              size={20}
-              className="cursor-pointer hover:opacity-80"
+              size={24}
+              className="text-gray-600 hover:text-emerald-600 cursor-pointer transition"
               onClick={() => handleIconNavigation("/wishlist")}
             />
-            <ShoppingCart
-              size={22}
-              className="cursor-pointer hover:opacity-80"
-              onClick={() => handleIconNavigation("/cart")}
-            />
+            <div className="relative">
+              <ShoppingCart
+                size={24}
+                className="text-gray-600 hover:text-emerald-600 cursor-pointer transition"
+                onClick={() => handleIconNavigation("/cart")}
+              />
+              {/* Mobile cart badge - always show */}
+              <span className="absolute -top-2 -right-2 bg-amber-500 text-white text-xs px-1.5 rounded-full">
+                {cartCount}
+              </span>
+            </div>
           </div>
 
+          {/* Navigation Links */}
           <div className="flex flex-col gap-2">
+            <button
+              onClick={() => handleIconNavigation("/about")}
+              className="flex items-center gap-3 py-2 text-gray-700 hover:text-emerald-600 transition"
+            >
+              <Info size={18} /> About
+            </button>
+            <button
+              onClick={() => handleIconNavigation("/contact")}
+              className="flex items-center gap-3 py-2 text-gray-700 hover:text-emerald-600 transition"
+            >
+              <Mail size={18} /> Contact Us
+            </button>
+          </div>
+
+          {/* Account Section */}
+          <div className="border-t border-gray-100 pt-4">
             {user ? (
               <>
-                <p className="text-sm font-semibold">{user.name}</p>
-                <button onClick={() => handleAccountClick("profile")}>
-                  Profile
-                </button>
-                <button onClick={() => handleAccountClick("orders")}>
-                  Orders
-                </button>
-                <button onClick={() => handleAccountClick("settings")}>
-                  Settings
-                </button>
-                <button
-                  onClick={() => handleAccountClick("logout")}
-                  className="text-red-300"
-                >
-                  Logout
-                </button>
+                <div className="mb-3 pb-2 border-b border-gray-100">
+                  <p className="font-semibold text-gray-800">{user.name}</p>
+                  <p className="text-xs text-gray-500">{user.email}</p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => handleAccountClick("profile")}
+                    className="flex items-center gap-3 py-2 text-gray-700"
+                  >
+                    <User size={16} /> Profile
+                  </button>
+                  <button
+                    onClick={() => handleAccountClick("orders")}
+                    className="flex items-center gap-3 py-2 text-gray-700"
+                  >
+                    <Package size={16} /> Orders
+                  </button>
+                  <button
+                    onClick={() => handleAccountClick("settings")}
+                    className="flex items-center gap-3 py-2 text-gray-700"
+                  >
+                    <Settings size={16} /> Settings
+                  </button>
+                  <button
+                    onClick={() => handleAccountClick("logout")}
+                    className="flex items-center gap-3 py-2 text-rose-600"
+                  >
+                    <LogOut size={16} /> Logout
+                  </button>
+                </div>
               </>
             ) : (
-              <>
-                <button onClick={() => handleAccountClick("signin")}>
-                  Sign In
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => handleAccountClick("signin")}
+                  className="w-full bg-gradient-to-r from-emerald-600 to-green-600 text-white py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition-all"
+                >
+                  <LogIn size={18} /> Sign In
                 </button>
-                <button onClick={() => handleAccountClick("signup")}>
-                  Create Account
+                <button
+                  onClick={() => handleAccountClick("signup")}
+                  className="w-full border border-emerald-600 text-emerald-600 py-2.5 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-50 transition-all"
+                >
+                  <UserPlus size={18} /> Create Account
                 </button>
-              </>
+              </div>
             )}
           </div>
         </div>

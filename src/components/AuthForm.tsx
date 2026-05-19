@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Eye, EyeOff, Mail, Lock, User, Check } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Check, ArrowRight, X } from "lucide-react";
 
 interface AuthFormProps {
   isSignUp: boolean;
@@ -15,7 +15,7 @@ interface AuthFormProps {
   onForgotPassword: () => void;
 }
 
-type Strength = "weak" | "medium" | "strong" | "";
+type StrengthLabel = "Very Weak" | "Weak" | "Fair" | "Good" | "Strong";
 
 export default function AuthForm({
   isSignUp,
@@ -28,7 +28,8 @@ export default function AuthForm({
 }: AuthFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [password, setPassword] = useState("");
-  const [strength, setStrength] = useState<Strength>("");
+  const [strengthScore, setStrengthScore] = useState(0);
+  const [strengthLabel, setStrengthLabel] = useState<StrengthLabel>("Very Weak");
 
   const rules = {
     length: password.length >= 8,
@@ -38,120 +39,99 @@ export default function AuthForm({
     special: /[^A-Za-z0-9]/.test(password),
   };
 
-  const isStrong =
-    rules.length &&
-    rules.uppercase &&
-    rules.lowercase &&
-    rules.number &&
-    rules.special;
-
-  const calculateStrength = (pwd: string): Strength => {
-    let score = 0;
-    if (pwd.length >= 8) score++;
-    if (/[A-Z]/.test(pwd)) score++;
-    if (/[a-z]/.test(pwd)) score++;
-    if (/[0-9]/.test(pwd)) score++;
-    if (/[^A-Za-z0-9]/.test(pwd)) score++;
-
-    if (score <= 2) return "weak";
-    if (score <= 4) return "medium";
-    return "strong";
-  };
+  const allRulesMet = rules.length && rules.uppercase && rules.lowercase && rules.number && rules.special;
 
   useEffect(() => {
-    if (password) setStrength(calculateStrength(password));
-    else setStrength("");
+    let score = 0;
+    if (rules.length) score++;
+    if (rules.uppercase) score++;
+    if (rules.lowercase) score++;
+    if (rules.number) score++;
+    if (rules.special) score++;
+    setStrengthScore(score);
+
+    if (score <= 1) setStrengthLabel("Very Weak");
+    else if (score === 2) setStrengthLabel("Weak");
+    else if (score === 3) setStrengthLabel("Fair");
+    else if (score === 4) setStrengthLabel("Good");
+    else setStrengthLabel("Strong");
   }, [password]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-  event.preventDefault();
+    event.preventDefault();
+    if (isSignUp && !allRulesMet) return;
 
-  if (isSignUp && !isStrong) return;
+    const formData = new FormData(event.currentTarget);
+    const name = formData.get("name");
+    const email = formData.get("email");
+    const pwd = formData.get("password");
 
-  const formData = new FormData(event.currentTarget);
+    if (!email || !pwd || typeof email !== "string" || typeof pwd !== "string") return;
 
-  const name = formData.get("name");
-  const email = formData.get("email");
-  const pwd = formData.get("password");
+    await onSubmit({
+      ...(isSignUp && name && typeof name === "string" ? { name } : {}),
+      email,
+      password: pwd,
+    });
+  };
 
-  // 🔥 HARD VALIDATION (prevents null going to backend)
-  if (!email || !pwd || typeof email !== "string" || typeof pwd !== "string") {
-    return;
-  }
-
-  await onSubmit({
-    ...(isSignUp && name && typeof name === "string" ? { name } : {}),
-    email,
-    password: pwd,
-  });
-};
-
-  const strengthPercent =
-    strength === "weak"
-      ? "33%"
-      : strength === "medium"
-      ? "66%"
-      : strength === "strong"
-      ? "100%"
-      : "0%";
-
+  const strengthPercent = (strengthScore / 5) * 100;
   const strengthColor =
-    strength === "weak"
+    strengthScore <= 1
       ? "bg-red-500"
-      : strength === "medium"
+      : strengthScore === 2
+      ? "bg-orange-500"
+      : strengthScore === 3
       ? "bg-yellow-500"
-      : strength === "strong"
-      ? "bg-green-500"
-      : "bg-gray-200";
+      : strengthScore === 4
+      ? "bg-blue-500"
+      : "bg-green-500";
 
   return (
-    <div className="w-full max-w-sm bg-white shadow-sm rounded-lg p-5 border border-gray-200">
-
+    <div className="w-full max-w-xs mx-auto rounded-2xl shadow-2xl p-5 transition-all duration-300">
       {/* Header */}
-      <div className="text-center mb-4">
-        <h2 className="text-xl font-semibold text-gray-800">
-          {isSignUp ? "Create Account" : "Sign In"}
+      <div className="text-center mb-5">
+        <h2 className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
+          {isSignUp ? "Create account" : "Welcome back"}
         </h2>
         <p className="text-gray-500 text-xs mt-1">
-          {isSignUp ? "Create your account" : "Enter your details"}
+          {isSignUp ? "Join us today" : "Sign in to continue"}
         </p>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-600 text-xs p-2 rounded mb-3 text-center">
+        <div className="bg-red-50/80 backdrop-blur-sm border border-red-200 text-red-600 text-xs p-2 rounded-xl mb-4 text-center">
           {error}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-
         {isSignUp && (
-          <div className="relative">
-            <User size={16} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+          <div className="relative group">
+            <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition" />
             <input
               name="name"
-              placeholder="Full Name"
+              placeholder="Full name"
               required
-              className="w-full pl-8 pr-2 py-2 text-sm rounded border border-gray-300 focus:ring-1 focus:ring-green-500 outline-none"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-gray-200 bg-white/50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
             />
           </div>
         )}
 
-        <div className="relative">
-          <Mail size={16} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
+        <div className="relative group">
+          <Mail size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition" />
           <input
             name="email"
             type="email"
-            placeholder="Email"
+            placeholder="Email address"
             required
-            className="w-full pl-8 pr-2 py-2 text-sm rounded border border-gray-300 focus:ring-1 focus:ring-green-500 outline-none"
+            className="w-full pl-9 pr-3 py-2 text-sm rounded-xl border border-gray-200 bg-white/50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
           />
         </div>
 
-        <div className="relative">
-          <Lock size={16} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
-
+        <div className="relative group">
+          <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-emerald-500 transition" />
           <input
             name="password"
             type={showPassword ? "text" : "password"}
@@ -159,77 +139,88 @@ export default function AuthForm({
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full pl-8 pr-8 py-2 text-sm rounded border border-gray-300 focus:ring-1 focus:ring-green-500 outline-none"
+            className="w-full pl-9 pr-9 py-2 text-sm rounded-xl border border-gray-200 bg-white/50 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition"
           />
-
           <button
             type="button"
             onClick={() => setShowPassword((prev) => !prev)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
           >
-            {showPassword ? <Eye size={16} /> : <EyeOff size={16} />}
+            {showPassword ? <Eye size={14} /> : <EyeOff size={14} />}
           </button>
         </div>
 
-        {/* Rules */}
-        {isSignUp && (
-          <div className="text-[11px] space-y-1 text-gray-500">
-            {[
-              { label: "At least 8 characters", valid: rules.length },
-              { label: "Uppercase letter", valid: rules.uppercase },
-              { label: "Lowercase letter", valid: rules.lowercase },
-              { label: "Number", valid: rules.number },
-              { label: "Special character", valid: rules.special },
-            ].map((rule, i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <Check size={12} className={rule.valid ? "text-green-500" : "text-gray-300"} />
-                <span className={rule.valid ? "text-green-600" : ""}>
-                  {rule.label}
+        {/* Advanced password validation (only for sign up) */}
+        {isSignUp && password && (
+          <div className="space-y-2 mt-1 text-xs">
+            {/* Strength bar with label */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] text-gray-500">
+                <span>Password strength</span>
+                <span className="font-medium" style={{ color: strengthScore <= 1 ? '#ef4444' : strengthScore === 2 ? '#f97316' : strengthScore === 3 ? '#eab308' : strengthScore === 4 ? '#3b82f6' : '#22c55e' }}>
+                  {strengthLabel}
                 </span>
               </div>
-            ))}
-          </div>
-        )}
-
-        {/* Strength */}
-        {isSignUp && password && (
-          <div className="space-y-1">
-            <div className="w-full h-1.5 bg-gray-200 rounded overflow-hidden">
-              <div
-                className={`h-full transition-all ${strengthColor}`}
-                style={{ width: strengthPercent }}
-              />
+              <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-300 rounded-full ${strengthColor}`}
+                  style={{ width: `${strengthPercent}%` }}
+                />
+              </div>
             </div>
-            <p className="text-[11px] text-gray-500">Strength: {strength}</p>
+
+            {/* Rule checklist */}
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 pt-1">
+              <div className="flex items-center gap-1.5">
+                {rules.length ? <Check size={10} className="text-green-500" /> : <X size={10} className="text-gray-300" />}
+                <span className={rules.length ? "text-green-600" : "text-gray-500"}>≥8 characters</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {rules.uppercase ? <Check size={10} className="text-green-500" /> : <X size={10} className="text-gray-300" />}
+                <span className={rules.uppercase ? "text-green-600" : "text-gray-500"}>Uppercase</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {rules.lowercase ? <Check size={10} className="text-green-500" /> : <X size={10} className="text-gray-300" />}
+                <span className={rules.lowercase ? "text-green-600" : "text-gray-500"}>Lowercase</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                {rules.number ? <Check size={10} className="text-green-500" /> : <X size={10} className="text-gray-300" />}
+                <span className={rules.number ? "text-green-600" : "text-gray-500"}>Number</span>
+              </div>
+              <div className="flex items-center gap-1.5 col-span-2">
+                {rules.special ? <Check size={10} className="text-green-500" /> : <X size={10} className="text-gray-300" />}
+                <span className={rules.special ? "text-green-600" : "text-gray-500"}>Special character (!@#$% etc.)</span>
+              </div>
+            </div>
           </div>
         )}
 
         <button
           type="submit"
-          disabled={loading || (isSignUp && !isStrong)}
-          className="w-full py-2 text-sm rounded bg-green-600 text-white font-medium hover:bg-green-700 disabled:bg-green-400"
+          disabled={loading || (isSignUp && !allRulesMet)}
+          className="w-full mt-2 py-2 text-sm rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 text-white font-medium shadow-md hover:shadow-lg disabled:opacity-50 transition-all flex items-center justify-center gap-2"
         >
-          {loading
-            ? isSignUp
-              ? "Creating..."
-              : "Signing in..."
-            : isSignUp
-            ? "Sign Up"
-            : "Sign In"}
+          {loading ? (
+            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : isSignUp ? (
+            <>Sign Up <ArrowRight size={14} /></>
+          ) : (
+            <>Sign In <ArrowRight size={14} /></>
+          )}
         </button>
       </form>
 
       {/* Divider */}
       <div className="flex items-center gap-2 my-4">
         <div className="flex-1 h-px bg-gray-200" />
-        <span className="text-[10px] text-gray-400">OR</span>
+        <span className="text-[10px] text-gray-400">or</span>
         <div className="flex-1 h-px bg-gray-200" />
       </div>
 
-      {/* Google */}
+      {/* Google button */}
       <button
         onClick={onGoogleSignIn}
-        className="w-full py-2 text-sm border rounded flex items-center justify-center gap-2 hover:bg-gray-50"
+        className="w-full py-2 text-sm rounded-xl border border-gray-200 bg-white/50 flex items-center justify-center gap-2 hover:bg-gray-50 transition"
       >
         <svg className="w-4 h-4" viewBox="0 0 48 48">
           <path fill="#4285F4" d="M24 9.5c3.9 0 7.1 1.3 9.7 3.7l7.3-7.3C36.8 2 30.8 0 24 0 14.6 0 6.6 5.3 2.3 13.1l8.5 6.6c2-5.9 7.6-10.2 13.2-10.2z" />
@@ -240,14 +231,13 @@ export default function AuthForm({
         Continue with Google
       </button>
 
-      <div className="mt-4 text-xs text-center space-y-1.5">
-        <button onClick={onForgotPassword} className="text-green-600 hover:underline">
+      <div className="mt-4 text-[11px] text-center space-y-1">
+        <button onClick={onForgotPassword} className="text-emerald-600 hover:underline">
           Forgot password?
         </button>
-
         <p className="text-gray-500">
           {isSignUp ? "Already have an account?" : "No account?"}{" "}
-          <button onClick={onToggleMode} className="text-green-600 hover:underline">
+          <button onClick={onToggleMode} className="text-emerald-600 font-medium hover:underline">
             {isSignUp ? "Sign In" : "Sign Up"}
           </button>
         </p>

@@ -24,12 +24,12 @@ import ClientLayout from "./client/layouts/ClientLayout";
 
 import { useAuthStore } from "./store/AuthStore";
 import ProductBuilder from "./admin/components/ProductBuilder";
-import AdminFitmentsWrapper from "./admin/payloads/AdminFitmentsWrapper";
 import Cart from "./client/pages/Cart";
 import ProductDetails from "./client/pages/ProductDetails";
 import WishlistPage from "./client/pages/WishlistPage";
 import CheckoutPage from "./client/pages/Checkout";
 import Feedback from "./client/components/Feedback";
+import AdminFitments from "./admin/components/AdminFitment";
 
 function App() {
   const initAuth = useAuthStore((s) => s.initAuth);
@@ -69,7 +69,7 @@ function App() {
         <Route path="products" element={<ProductBuilder />} />
         <Route path="categories" element={<AdminCategories />} />
         <Route path="brands" element={<AdminBrands />} />
-        <Route path="/admin/fitments" element={<AdminFitmentsWrapper />} />
+        <Route path="/admin/fitments" element={<AdminFitments/>} />
         <Route path="orders" element={<AdminOrders />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="roles" element={<AdminRoles />} />

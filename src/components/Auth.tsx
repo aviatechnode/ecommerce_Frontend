@@ -16,21 +16,12 @@ export default function Auth() {
   const navigate = useNavigate();
 
   const oauthSuccess = searchParams.get("oauth") === "success";
-  const oauthToken = searchParams.get("token"); // if backend sends token
-
-  /* ================= RTK QUERIES ================= */
+  const oauthToken = searchParams.get("token");
 
   const { data: user, isLoading: meLoading } = useMeQuery();
-
-  const [signin, { isLoading: signingIn, error: signinError }] =
-    useSigninMutation();
-
-  const [signup, { isLoading: signingUp, error: signupError }] =
-    useSignupMutation();
-
+  const [signin, { isLoading: signingIn, error: signinError }] = useSigninMutation();
+  const [signup, { isLoading: signingUp, error: signupError }] = useSignupMutation();
   const [googleLogin] = useGoogleMutation();
-
-  /* ================= OAUTH ================= */
 
   useEffect(() => {
     if (oauthSuccess && oauthToken) {
@@ -38,15 +29,11 @@ export default function Auth() {
     }
   }, [oauthSuccess, oauthToken, googleLogin]);
 
-  /* ================= REDIRECT IF LOGGED IN ================= */
-
   useEffect(() => {
     if (user) {
       navigate("/", { replace: true });
     }
   }, [user, navigate]);
-
-  /* ================= SUBMIT ================= */
 
   const handleSubmit = async (data: {
     name?: string;
@@ -71,46 +58,42 @@ export default function Auth() {
     }
   };
 
-  /* ================= UI STATE ================= */
-
   const loading = meLoading || signingIn || signingUp;
   const error =
     (signinError as any)?.data?.message ||
     (signupError as any)?.data?.message ||
     null;
 
-  /* ================= UI ================= */
-
   if (user) {
     return (
-      <AuthSuccess title="Success" message="You are already logged in" />
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <AuthSuccess title="Already logged in" message="Redirecting..." />
+      </div>
     );
   }
 
   return (
-    <div className="flex items-start justify-center min-h-screen px-4 pt-8 bg-gray-50 text-black">
+    <div className="min-h-screen flex items-center justify-center px-4 bg-white">
+      <div className="relative z-10 w-full flex justify-center">
+        {!loading && (
+          <AuthForm
+            isSignUp={isSignUp}
+            loading={loading}
+            error={error}
+            onSubmit={handleSubmit}
+            onGoogleSignIn={() => navigate("/api/auth/google")}
+            onToggleMode={() => setIsSignUp((p) => !p)}
+            onForgotPassword={() => navigate("/reset-request")}
+          />
+        )}
 
-      {/* ================= FORM ================= */}
-      {!loading && (
-        <AuthForm
-          isSignUp={isSignUp}
-          loading={loading}
-          error={error}
-          onSubmit={handleSubmit}
-          onGoogleSignIn={() => navigate("/api/auth/google")} // optional redirect flow
-          onToggleMode={() => setIsSignUp((p) => !p)}
-          onForgotPassword={() => navigate("/reset-request")}
-        />
-      )}
-
-      {/* ================= LOADING ================= */}
-      {signingIn && (
-        <AuthSuccess title="Signing In" message="Please wait..." />
-      )}
-
-      {signingUp && (
-        <AuthSuccess title="Creating Account" message="Please wait..." />
-      )}
+        {(signingIn || signingUp) && (
+          <AuthSuccess
+            title={signingIn ? "Signing In" : "Creating Account"}
+            message="Please wait..."
+          />
+        )}
+      </div>
     </div>
   );
 }
