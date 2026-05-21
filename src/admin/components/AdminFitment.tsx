@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   useCreateMakeMutation,
   useCreateModelMutation,
@@ -144,22 +144,122 @@ const AdminFitments = () => {
     quantityRequired: "",
   });
 
-  // Search products by fitment – year stored as string, converted to number for query
-  const [searchParams, setSearchParams] = useState({
-    makeId: "",
-    modelId: "",
-    generationId: "",
-    engineId: "",
-    trimId: "",
+  // Search with actual values instead of IDs
+  const [searchTerms, setSearchTerms] = useState({
+    makeName: "",
+    modelName: "",
+    generationName: "",
+    engineCode: "",
+    trimName: "",
     year: "",
   });
 
-  const shouldSkipSearch = !searchParams.makeId &&
-    !searchParams.modelId &&
-    !searchParams.generationId &&
-    !searchParams.engineId &&
-    !searchParams.trimId &&
-    !searchParams.year;
+  // Helper function to find ID from name/value in vehicle tree
+  const findMakeIdByName = (makeName: string): string | undefined => {
+    const make = vehicleTree?.find(m => 
+      m.name.toLowerCase().includes(makeName.toLowerCase())
+    );
+    return make?.id;
+  };
+
+  const findModelIdByName = (makeName: string, modelName: string): string | undefined => {
+    const make = vehicleTree?.find(m => 
+      m.name.toLowerCase().includes(makeName.toLowerCase())
+    );
+    const model = make?.models?.find(m => 
+      m.name.toLowerCase().includes(modelName.toLowerCase())
+    );
+    return model?.id;
+  };
+
+  const findGenerationIdByName = (makeName: string, modelName: string, generationName: string): string | undefined => {
+    const make = vehicleTree?.find(m => 
+      m.name.toLowerCase().includes(makeName.toLowerCase())
+    );
+    const model = make?.models?.find(m => 
+      m.name.toLowerCase().includes(modelName.toLowerCase())
+    );
+    const generation = model?.generations?.find(g => 
+      g.name.toLowerCase().includes(generationName.toLowerCase())
+    );
+    return generation?.id;
+  };
+
+  const findEngineIdByCode = (makeName: string, modelName: string, generationName: string, engineCode: string): string | undefined => {
+    const make = vehicleTree?.find(m => 
+      m.name.toLowerCase().includes(makeName.toLowerCase())
+    );
+    const model = make?.models?.find(m => 
+      m.name.toLowerCase().includes(modelName.toLowerCase())
+    );
+    const generation = model?.generations?.find(g => 
+      g.name.toLowerCase().includes(generationName.toLowerCase())
+    );
+    const engine = generation?.engines?.find(e => 
+      e.engineCode.toLowerCase().includes(engineCode.toLowerCase())
+    );
+    return engine?.id;
+  };
+
+  const findTrimIdByName = (makeName: string, modelName: string, generationName: string, engineCode: string, trimName: string): string | undefined => {
+    const make = vehicleTree?.find(m => 
+      m.name.toLowerCase().includes(makeName.toLowerCase())
+    );
+    const model = make?.models?.find(m => 
+      m.name.toLowerCase().includes(modelName.toLowerCase())
+    );
+    const generation = model?.generations?.find(g => 
+      g.name.toLowerCase().includes(generationName.toLowerCase())
+    );
+    const engine = generation?.engines?.find(e => 
+      e.engineCode.toLowerCase().includes(engineCode.toLowerCase())
+    );
+    const trim = engine?.trims?.find(t => 
+      t.name.toLowerCase().includes(trimName.toLowerCase())
+    );
+    return trim?.id;
+  };
+
+  // Convert search terms to IDs for the API query
+  const searchParams = useMemo(() => {
+    let makeId, modelId, generationId, engineId, trimId;
+
+    if (searchTerms.makeName) {
+      makeId = findMakeIdByName(searchTerms.makeName);
+      
+      if (searchTerms.modelName && makeId) {
+        modelId = findModelIdByName(searchTerms.makeName, searchTerms.modelName);
+        
+        if (searchTerms.generationName && modelId) {
+          generationId = findGenerationIdByName(searchTerms.makeName, searchTerms.modelName, searchTerms.generationName);
+          
+          if (searchTerms.engineCode && generationId) {
+            engineId = findEngineIdByCode(searchTerms.makeName, searchTerms.modelName, searchTerms.generationName, searchTerms.engineCode);
+            
+            if (searchTerms.trimName && engineId) {
+              trimId = findTrimIdByName(searchTerms.makeName, searchTerms.modelName, searchTerms.generationName, searchTerms.engineCode, searchTerms.trimName);
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      makeId,
+      modelId,
+      generationId,
+      engineId,
+      trimId,
+      year: searchTerms.year ? parseInt(searchTerms.year, 10) : undefined,
+    };
+  }, [searchTerms, vehicleTree]);
+
+  const shouldSkipSearch = !searchTerms.makeName &&
+    !searchTerms.modelName &&
+    !searchTerms.generationName &&
+    !searchTerms.engineCode &&
+    !searchTerms.trimName &&
+    !searchTerms.year;
 
   const {
     data: searchedProducts,
@@ -167,12 +267,12 @@ const AdminFitments = () => {
     refetch: searchProducts,
   } = useGetProductsByFitmentQuery(
     {
-      makeId: searchParams.makeId || undefined,
-      modelId: searchParams.modelId || undefined,
-      generationId: searchParams.generationId || undefined,
-      engineId: searchParams.engineId || undefined,
-      trimId: searchParams.trimId || undefined,
-      year: searchParams.year ? parseInt(searchParams.year, 10) : undefined,
+      makeId: searchParams.makeId,
+      modelId: searchParams.modelId,
+      generationId: searchParams.generationId,
+      engineId: searchParams.engineId,
+      trimId: searchParams.trimId,
+      year: searchParams.year,
     },
     { skip: shouldSkipSearch }
   );
@@ -507,71 +607,153 @@ const AdminFitments = () => {
           )}
         </div>
 
-        {/* Search Products by Fitment */}
+        {/* Search Products by Fitment - Now with actual values */}
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-xl font-semibold">🔍 Find Products by Vehicle</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-            <input
-              type="text"
-              placeholder="Make ID"
-              value={searchParams.makeId}
-              onChange={(e) =>
-                setSearchParams((p) => ({ ...p, makeId: e.target.value }))
-              }
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Model ID"
-              value={searchParams.modelId}
-              onChange={(e) =>
-                setSearchParams((p) => ({ ...p, modelId: e.target.value }))
-              }
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Generation ID"
-              value={searchParams.generationId}
-              onChange={(e) =>
-                setSearchParams((p) => ({ ...p, generationId: e.target.value }))
-              }
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Engine ID"
-              value={searchParams.engineId}
-              onChange={(e) =>
-                setSearchParams((p) => ({ ...p, engineId: e.target.value }))
-              }
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
-            <input
-              type="text"
-              placeholder="Trim ID"
-              value={searchParams.trimId}
-              onChange={(e) =>
-                setSearchParams((p) => ({ ...p, trimId: e.target.value }))
-              }
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
-            <input
-              type="number"
-              placeholder="Year"
-              value={searchParams.year}
-              onChange={(e) =>
-                setSearchParams((p) => ({ ...p, year: e.target.value }))
-              }
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
-            <button
-              onClick={searchProducts}
-              className="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-900"
-            >
-              Search
-            </button>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <input
+                type="text"
+                placeholder="Make name (e.g., Toyota)"
+                value={searchTerms.makeName}
+                onChange={(e) =>
+                  setSearchTerms((p) => ({ ...p, makeName: e.target.value, modelName: "", generationName: "", engineCode: "", trimName: "" }))
+                }
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                list="make-suggestions"
+              />
+              <datalist id="make-suggestions">
+                {vehicleTree?.map(make => (
+                  <option key={make.id} value={make.name} />
+                ))}
+              </datalist>
+
+              <input
+                type="text"
+                placeholder="Model name"
+                value={searchTerms.modelName}
+                disabled={!searchTerms.makeName}
+                onChange={(e) =>
+                  setSearchTerms((p) => ({ ...p, modelName: e.target.value, generationName: "", engineCode: "", trimName: "" }))
+                }
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
+                list="model-suggestions"
+              />
+              <datalist id="model-suggestions">
+                {searchTerms.makeName && vehicleTree
+                  ?.find(m => m.name.toLowerCase().includes(searchTerms.makeName.toLowerCase()))
+                  ?.models?.map(model => (
+                    <option key={model.id} value={model.name} />
+                  ))}
+              </datalist>
+
+              <input
+                type="text"
+                placeholder="Generation name"
+                value={searchTerms.generationName}
+                disabled={!searchTerms.modelName}
+                onChange={(e) =>
+                  setSearchTerms((p) => ({ ...p, generationName: e.target.value, engineCode: "", trimName: "" }))
+                }
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
+                list="generation-suggestions"
+              />
+              <datalist id="generation-suggestions">
+                {searchTerms.makeName && searchTerms.modelName && vehicleTree
+                  ?.find(m => m.name.toLowerCase().includes(searchTerms.makeName.toLowerCase()))
+                  ?.models?.find(m => m.name.toLowerCase().includes(searchTerms.modelName.toLowerCase()))
+                  ?.generations?.map(gen => (
+                    <option key={gen.id} value={gen.name} />
+                  ))}
+              </datalist>
+
+              <input
+                type="text"
+                placeholder="Engine code (e.g., 2JZ-GTE)"
+                value={searchTerms.engineCode}
+                disabled={!searchTerms.generationName}
+                onChange={(e) =>
+                  setSearchTerms((p) => ({ ...p, engineCode: e.target.value, trimName: "" }))
+                }
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
+                list="engine-suggestions"
+              />
+              <datalist id="engine-suggestions">
+                {searchTerms.makeName && searchTerms.modelName && searchTerms.generationName && vehicleTree
+                  ?.find(m => m.name.toLowerCase().includes(searchTerms.makeName.toLowerCase()))
+                  ?.models?.find(m => m.name.toLowerCase().includes(searchTerms.modelName.toLowerCase()))
+                  ?.generations?.find(g => g.name.toLowerCase().includes(searchTerms.generationName.toLowerCase()))
+                  ?.engines?.map(engine => (
+                    <option key={engine.id} value={engine.engineCode} />
+                  ))}
+              </datalist>
+
+              <input
+                type="text"
+                placeholder="Trim name"
+                value={searchTerms.trimName}
+                disabled={!searchTerms.engineCode}
+                onChange={(e) =>
+                  setSearchTerms((p) => ({ ...p, trimName: e.target.value }))
+                }
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
+                list="trim-suggestions"
+              />
+              <datalist id="trim-suggestions">
+                {searchTerms.makeName && searchTerms.modelName && searchTerms.generationName && searchTerms.engineCode && vehicleTree
+                  ?.find(m => m.name.toLowerCase().includes(searchTerms.makeName.toLowerCase()))
+                  ?.models?.find(m => m.name.toLowerCase().includes(searchTerms.modelName.toLowerCase()))
+                  ?.generations?.find(g => g.name.toLowerCase().includes(searchTerms.generationName.toLowerCase()))
+                  ?.engines?.find(e => e.engineCode.toLowerCase().includes(searchTerms.engineCode.toLowerCase()))
+                  ?.trims?.map(trim => (
+                    <option key={trim.id} value={trim.name} />
+                  ))}
+              </datalist>
+
+              <input
+                type="number"
+                placeholder="Year"
+                value={searchTerms.year}
+                onChange={(e) =>
+                  setSearchTerms((p) => ({ ...p, year: e.target.value }))
+                }
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+
+            {/* Show selected vehicle summary */}
+            {(searchTerms.makeName || searchTerms.modelName || searchTerms.generationName || 
+              searchTerms.engineCode || searchTerms.trimName) && (
+              <div className="rounded-lg bg-blue-50 p-3 text-sm">
+                <p className="font-semibold text-blue-900">Selected Vehicle:</p>
+                <p className="text-blue-800">
+                  {searchTerms.makeName && <span>Make: {searchTerms.makeName}</span>}
+                  {searchTerms.modelName && <span> → Model: {searchTerms.modelName}</span>}
+                  {searchTerms.generationName && <span> → Generation: {searchTerms.generationName}</span>}
+                  {searchTerms.engineCode && <span> → Engine: {searchTerms.engineCode}</span>}
+                  {searchTerms.trimName && <span> → Trim: {searchTerms.trimName}</span>}
+                  {searchTerms.year && <span> → Year: {searchTerms.year}</span>}
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={searchProducts}
+                disabled={shouldSkipSearch}
+                className="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-50"
+              >
+                Search Products
+              </button>
+              <button
+                onClick={() => setSearchTerms({ makeName: "", modelName: "", generationName: "", engineCode: "", trimName: "", year: "" })}
+                className="rounded-lg bg-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-400"
+              >
+                Clear
+              </button>
+            </div>
           </div>
+
           <div className="mt-4">
             {searchingProducts && <Spinner />}
             {searchedProducts && searchedProducts.length > 0 && (
@@ -590,13 +772,15 @@ const AdminFitments = () => {
               </div>
             )}
             {searchedProducts && searchedProducts.length === 0 && !shouldSkipSearch && (
-              <div className="mt-3 text-sm text-gray-500">No products match this fitment.</div>
+              <div className="mt-3 text-sm text-gray-500">
+                No products match this fitment.
+              </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* ---------- MODALS ---------- */}
+      {/* ---------- MODALS (same as before) ---------- */}
       {/* Create Make */}
       {activeModal === "make" && (
         <Modal title="Create New Make" onClose={closeModal}>
@@ -807,8 +991,7 @@ const AdminFitments = () => {
             </div>
             <div>
               <label className="block text-sm font-medium">Fuel Type</label>
-              <input
-                type="text"
+              <input                type="text"
                 value={engineForm.fuelType}
                 onChange={(e) => setEngineForm({ ...engineForm, fuelType: e.target.value })}
                 className="mt-1 w-full rounded border p-2"

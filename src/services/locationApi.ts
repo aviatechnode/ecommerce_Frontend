@@ -8,12 +8,12 @@ type ApiError = {
   data?: unknown;
 };
 
-type StateOption = {
+export type StateOption = {
   id: string;
   name: string;
 };
 
-type LgaOption = {
+export type LgaOption = {
   id: string;
   name: string;
 };

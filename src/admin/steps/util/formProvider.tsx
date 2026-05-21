@@ -48,12 +48,27 @@ const safeNumber = (
   return Number.isFinite(n) ? n : fallback;
 };
 
+const safeString = (
+  value: unknown
+): string | undefined => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+
+  return trimmed.length
+    ? trimmed
+    : undefined;
+};
+
 /* =========================================================
    HOOK
 ========================================================= */
 
 export function useProductForm() {
-  const [createProduct] = useCreateProductMutation();
+  const [createProduct] =
+    useCreateProductMutation();
 
   const store = useProductBuilder();
 
@@ -63,88 +78,196 @@ export function useProductForm() {
 
   const defaultValues: FormValues = useMemo(
     () => ({
+      id: store.product.id ?? undefined,
+
+      slug: store.product.slug ?? "",
+
       name: store.product.name ?? "",
-      description: store.product.description ?? "",
 
-      brandId: store.product.brandId ?? "",
-      categoryId: store.product.categoryId ?? "",
+      description:
+        store.product.description ?? "",
 
-      isActive: store.product.isActive ?? true,
-      isFeatured: store.product.isFeatured ?? false,
+      brandId:
+        store.product.brandId ?? "",
+
+      categoryId:
+        store.product.categoryId ?? "",
+
+      isActive:
+        store.product.isActive ?? true,
+
+      isFeatured:
+        store.product.isFeatured ?? false,
 
       searchKeywords:
         store.product.searchKeywords ?? "",
 
-      oemNumbers: store.oemNumbers.map((i) => ({
-        oemNumber: i.oemNumber ?? "",
-      })),
+      oemNumbers: store.oemNumbers.map(
+        (i) => ({
+          id: i.id,
+          oemNumber:
+            i.oemNumber ?? "",
+        })
+      ),
 
-      specifications: store.specifications.map(
-        (s) => ({
+      specifications:
+        store.specifications.map((s) => ({
+          id: s.id,
           name: s.name ?? "",
           value: s.value ?? "",
-        })
-      ),
-
-      productFitments: store.fitments.map(
-        (f) => ({
-          trimId: f.trimId ?? "",
-          notes: f.notes ?? "",
-        })
-      ),
-
-      medias: store.medias.map((m) => ({
-        id: m.id,
-        url: m.url ?? "",
-        type: m.type ?? "IMAGE",
-        position: safeNumber(m.position, 0) ?? 0,
-      })),
-
-      variants: store.variants.map((v) => ({
-        id: v.id,
-
-        name: v.name ?? "",
-        sku: v.sku ?? "",
-
-        price: safeNumber(v.price, 0) ?? 0,
-
-        costPrice: safeNumber(v.costPrice),
-        compareAtPrice: safeNumber(
-          v.compareAtPrice
-        ),
-
-        weight: safeNumber(v.weight),
-        length: safeNumber(v.length),
-        width: safeNumber(v.width),
-        height: safeNumber(v.height),
-
-        barcode: v.barcode ?? "",
-
-        isActive: v.isActive ?? true,
-
-        attributes: (v.attributes ?? []).map(
-          (a) => ({
-            valueId: a.valueId ?? "",
-          })
-        ),
-
-        inventories: (
-          v.inventories ?? []
-        ).map((inv) => ({
-          warehouseId:
-            inv.warehouseId ?? "",
-
-          stock:
-            safeNumber(inv.stock, 0) ?? 0,
-
-          reserved:
-            safeNumber(inv.reserved, 0) ?? 0,
-
-          threshold: safeNumber(
-            inv.threshold
-          ),
         })),
-      })),
+
+      productFitments:
+        store.fitments.map((f) => ({
+          id: f.id,
+
+          level:
+            f.level ?? "TRIM",
+
+          makeId:
+            f.makeId ?? undefined,
+
+          modelId:
+            f.modelId ?? undefined,
+
+          generationId:
+            f.generationId ??
+            undefined,
+
+          engineId:
+            f.engineId ?? undefined,
+
+          trimId:
+            f.trimId ?? undefined,
+
+          yearStart:
+            safeNumber(
+              f.yearStart
+            ),
+
+          yearEnd:
+            safeNumber(
+              f.yearEnd
+            ),
+
+          notes:
+            f.notes ?? "",
+
+          position:
+            f.position ?? "",
+
+          quantityRequired:
+            safeNumber(
+              f.quantityRequired
+            ),
+
+          isUniversal:
+            f.isUniversal ?? false,
+        })),
+
+      medias: store.medias.map(
+        (m, index) => ({
+          id: m.id,
+
+          url: m.url ?? "",
+
+          type:
+            m.type ?? "IMAGE",
+
+          position:
+            safeNumber(
+              m.position,
+              index
+            ) ?? index,
+        })
+      ),
+
+      variants: store.variants.map(
+        (v) => ({
+          id: v.id,
+
+          name: v.name ?? "",
+
+          sku: v.sku ?? "",
+
+          price:
+            safeNumber(
+              v.price,
+              0
+            ) ?? 0,
+
+          costPrice:
+            safeNumber(
+              v.costPrice
+            ),
+
+          compareAtPrice:
+            safeNumber(
+              v.compareAtPrice
+            ),
+
+          weight:
+            safeNumber(
+              v.weight
+            ),
+
+          length:
+            safeNumber(
+              v.length
+            ),
+
+          width:
+            safeNumber(
+              v.width
+            ),
+
+          height:
+            safeNumber(
+              v.height
+            ),
+
+          barcode:
+            v.barcode ?? "",
+
+          isActive:
+            v.isActive ?? true,
+
+          attributes: (
+            v.attributes ?? []
+          ).map((a) => ({
+            id: a.id,
+            valueId:
+              a.valueId ?? "",
+          })),
+
+          inventories: (
+            v.inventories ?? []
+          ).map((inv) => ({
+            id: inv.id,
+
+            warehouseId:
+              inv.warehouseId ??
+              "",
+
+            stock:
+              safeNumber(
+                inv.stock,
+                0
+              ) ?? 0,
+
+            reserved:
+              safeNumber(
+                inv.reserved,
+                0
+              ) ?? 0,
+
+            threshold:
+              safeNumber(
+                inv.threshold
+              ),
+          })),
+        })
+      ),
     }),
     [store]
   );
@@ -155,7 +278,11 @@ export function useProductForm() {
 
   const form = useForm<FormValues>({
     mode: "onChange",
-    resolver: zodResolver(createProductSchema),
+
+    resolver: zodResolver(
+      createProductSchema
+    ),
+
     defaultValues,
   });
 
@@ -175,20 +302,22 @@ export function useProductForm() {
     name: "variants",
   });
 
-  const specifications = useFieldArray({
-    control,
-    name: "specifications",
-  });
+  const specifications =
+    useFieldArray({
+      control,
+      name: "specifications",
+    });
 
   const medias = useFieldArray({
     control,
     name: "medias",
   });
 
-  const oemNumbers = useFieldArray({
-    control,
-    name: "oemNumbers",
-  });
+  const oemNumbers =
+    useFieldArray({
+      control,
+      name: "oemNumbers",
+    });
 
   const fitments = useFieldArray({
     control,
@@ -207,59 +336,94 @@ export function useProductForm() {
      STORE SYNC
   ========================================================= */
 
-  const lastSyncRef = useRef<string>("");
+  const lastSyncRef =
+    useRef<string>("");
 
   useEffect(() => {
     if (!watchedValues) return;
 
     const payload = {
-      name: watchedValues.name ?? "",
+      id: watchedValues.id,
+
+      slug:
+        watchedValues.slug ?? "",
+
+      name:
+        watchedValues.name ?? "",
 
       description:
-        watchedValues.description ?? "",
+        watchedValues.description ??
+        "",
 
-      brandId: watchedValues.brandId ?? "",
+      brandId:
+        watchedValues.brandId ?? "",
 
       categoryId:
-        watchedValues.categoryId ?? "",
+        watchedValues.categoryId ??
+        "",
 
       isActive:
-        watchedValues.isActive ?? true,
+        watchedValues.isActive ??
+        true,
 
       isFeatured:
-        watchedValues.isFeatured ?? false,
+        watchedValues.isFeatured ??
+        false,
 
       searchKeywords:
-        watchedValues.searchKeywords ?? "",
+        watchedValues.searchKeywords ??
+        "",
 
-      variants: watchedValues.variants ?? [],
+      variants:
+        watchedValues.variants ?? [],
 
       specifications:
-        watchedValues.specifications ?? [],
+        watchedValues.specifications ??
+        [],
 
       productFitments:
-        watchedValues.productFitments ?? [],
+        watchedValues.productFitments ??
+        [],
 
-      medias: watchedValues.medias ?? [],
+      medias:
+        watchedValues.medias ?? [],
 
       oemNumbers:
-        watchedValues.oemNumbers ?? [],
+        watchedValues.oemNumbers ??
+        [],
     };
 
     const serialized =
       JSON.stringify(payload);
 
-    if (serialized === lastSyncRef.current) {
+    if (
+      serialized ===
+      lastSyncRef.current
+    ) {
       return;
     }
 
-    lastSyncRef.current = serialized;
+    lastSyncRef.current =
+      serialized;
 
     /* =====================================================
        PRODUCT
     ===================================================== */
 
-    store.setProduct("name", payload.name);
+    store.setProduct(
+      "id",
+      payload.id
+    );
+
+    store.setProduct(
+      "slug",
+      payload.slug
+    );
+
+    store.setProduct(
+      "name",
+      payload.name
+    );
 
     store.setProduct(
       "description",
@@ -296,7 +460,8 @@ export function useProductForm() {
     ===================================================== */
 
     useProductBuilder.setState({
-      variants: payload.variants as any,
+      variants:
+        payload.variants as any,
 
       specifications:
         payload.specifications as any,
@@ -304,7 +469,8 @@ export function useProductForm() {
       fitments:
         payload.productFitments as any,
 
-      medias: payload.medias as any,
+      medias:
+        payload.medias as any,
 
       oemNumbers:
         payload.oemNumbers as any,
@@ -324,139 +490,232 @@ export function useProductForm() {
       );
 
     if (!parsed.success) {
-      console.log(parsed.error.flatten());
+      console.log(
+        parsed.error.flatten()
+      );
+
       return;
     }
 
-    const data: ParsedValues = parsed.data;
+    const data: ParsedValues =
+      parsed.data;
 
-    const payload: CreateProductInput = {
-      id: data.id,
+    const payload: CreateProductInput =
+      {
+        id: data.id,
 
-      name: data.name,
+        slug:
+          safeString(data.slug),
 
-      description: data.description,
+        name: data.name,
 
-      brandId: data.brandId,
+        description:
+          safeString(
+            data.description
+          ),
 
-      categoryId: data.categoryId,
+        brandId: data.brandId,
 
-      isActive: data.isActive,
-
-      isFeatured: data.isFeatured,
-
-      searchKeywords:
-        data.searchKeywords,
-
-      oemNumbers: (
-        data.oemNumbers ?? []
-      ).map((oem) => ({
-        oemNumber: oem.oemNumber,
-      })),
-
-      specifications: (
-        data.specifications ?? []
-      ).map((spec) => ({
-        name: spec.name,
-        value: spec.value,
-      })),
-
-      productFitments: (
-        data.productFitments ?? []
-      ).map((fitment) => ({
-        trimId: fitment.trimId,
-        notes: fitment.notes,
-      })),
-
-      medias: (data.medias ?? []).map(
-        (media, index) => ({
-          id: media.id,
-          url: media.url,
-          type: media.type,
-
-          position:
-            safeNumber(
-              media.position,
-              index
-            ) ?? index,
-        })
-      ),
-
-      variants: (
-        data.variants ?? []
-      ).map((variant) => ({
-        id: variant.id,
-
-        name: variant.name,
-
-        sku: variant.sku,
-
-        price:
-          safeNumber(
-            variant.price,
-            0
-          ) ?? 0,
-
-        costPrice: safeNumber(
-          variant.costPrice
-        ),
-
-        compareAtPrice: safeNumber(
-          variant.compareAtPrice
-        ),
-
-        weight: safeNumber(
-          variant.weight
-        ),
-
-        length: safeNumber(
-          variant.length
-        ),
-
-        width: safeNumber(
-          variant.width
-        ),
-
-        height: safeNumber(
-          variant.height
-        ),
-
-        barcode:
-          variant.barcode || undefined,
+        categoryId:
+          data.categoryId,
 
         isActive:
-          variant.isActive ?? true,
+          data.isActive,
 
-        attributes: (
-          variant.attributes ?? []
-        ).map((attr) => ({
-          valueId: attr.valueId,
-        })),
+        isFeatured:
+          data.isFeatured,
 
-        inventories: (
-          variant.inventories ?? []
-        ).map((inv) => ({
-          warehouseId:
-            inv.warehouseId,
-
-          stock:
-            safeNumber(
-              inv.stock,
-              0
-            ) ?? 0,
-
-          reserved:
-            safeNumber(
-              inv.reserved,
-              0
-            ) ?? 0,
-
-          threshold: safeNumber(
-            inv.threshold
+        searchKeywords:
+          safeString(
+            data.searchKeywords
           ),
+
+        oemNumbers: (
+          data.oemNumbers ?? []
+        ).map((oem) => ({
+          id: oem.id,
+
+          oemNumber:
+            oem.oemNumber,
         })),
-      })),
-    };
+
+        specifications: (
+          data.specifications ??
+          []
+        ).map((spec) => ({
+          id: spec.id,
+
+          name: spec.name,
+
+          value: spec.value,
+        })),
+
+        productFitments: (
+          data.productFitments ??
+          []
+        ).map((fitment) => ({
+          id: fitment.id,
+
+          level:
+            fitment.level,
+
+          makeId:
+            fitment.makeId,
+
+          modelId:
+            fitment.modelId,
+
+          generationId:
+            fitment.generationId,
+
+          engineId:
+            fitment.engineId,
+
+          trimId:
+            fitment.trimId,
+
+          yearStart:
+            safeNumber(
+              fitment.yearStart
+            ),
+
+          yearEnd:
+            safeNumber(
+              fitment.yearEnd
+            ),
+
+          notes:
+            safeString(
+              fitment.notes
+            ),
+
+          position:
+            safeString(
+              fitment.position
+            ),
+
+          quantityRequired:
+            safeNumber(
+              fitment.quantityRequired
+            ),
+
+          isUniversal:
+            fitment.isUniversal ??
+            false,
+        })),
+
+        medias: (
+          data.medias ?? []
+        ).map(
+          (media, index) => ({
+            id: media.id,
+
+            url: media.url,
+
+            type: media.type,
+
+            position:
+              safeNumber(
+                media.position,
+                index
+              ) ?? index,
+          })
+        ),
+
+        variants: (
+          data.variants ?? []
+        ).map((variant) => ({
+          id: variant.id,
+
+          name:
+            variant.name,
+
+          sku:
+            variant.sku,
+
+          price:
+            safeNumber(
+              variant.price,
+              0
+            ) ?? 0,
+
+          costPrice:
+            safeNumber(
+              variant.costPrice
+            ),
+
+          compareAtPrice:
+            safeNumber(
+              variant.compareAtPrice
+            ),
+
+          weight:
+            safeNumber(
+              variant.weight
+            ),
+
+          length:
+            safeNumber(
+              variant.length
+            ),
+
+          width:
+            safeNumber(
+              variant.width
+            ),
+
+          height:
+            safeNumber(
+              variant.height
+            ),
+
+          barcode:
+            safeString(
+              variant.barcode
+            ),
+
+          isActive:
+            variant.isActive ??
+            true,
+
+          attributes: (
+            variant.attributes ??
+            []
+          ).map((attr) => ({
+            id: attr.id,
+
+            valueId:
+              attr.valueId,
+          })),
+
+          inventories: (
+            variant.inventories ??
+            []
+          ).map((inv) => ({
+            id: inv.id,
+
+            warehouseId:
+              inv.warehouseId,
+
+            stock:
+              safeNumber(
+                inv.stock,
+                0
+              ) ?? 0,
+
+            reserved:
+              safeNumber(
+                inv.reserved,
+                0
+              ) ?? 0,
+
+            threshold:
+              safeNumber(
+                inv.threshold
+              ),
+          })),
+        })),
+      };
 
     if (
       !payload.name ||
@@ -466,9 +725,14 @@ export function useProductForm() {
       return;
     }
 
-    console.log("PRODUCT PAYLOAD:", payload);
+    console.log(
+      "PRODUCT PAYLOAD:",
+      payload
+    );
 
-    await createProduct(payload).unwrap();
+    await createProduct(
+      payload
+    ).unwrap();
   };
 
   /* =========================================================

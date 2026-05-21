@@ -1,7 +1,25 @@
-let csrfToken: string | null = null;
+const CSRF_KEY = "csrfToken";
 
-export const getCsrfToken = () => csrfToken;
+let csrfToken: string | null =
+  sessionStorage.getItem(CSRF_KEY);
 
-export const setCsrfToken = (token: string | null) => {
+export const getCsrfToken = () => {
+  return csrfToken;
+};
+
+export const setCsrfToken = (
+  token: string | null
+) => {
   csrfToken = token;
+
+  if (token) {
+    sessionStorage.setItem(
+      CSRF_KEY,
+      token
+    );
+  } else {
+    sessionStorage.removeItem(
+      CSRF_KEY
+    );
+  }
 };

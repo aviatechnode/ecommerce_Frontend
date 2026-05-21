@@ -14,54 +14,56 @@ export const api = axios.create({
 });
 
 // attach CSRF before every request
-api.interceptors.request.use((config) => {
-  const token = getCsrfToken();
+api.interceptors.request.use(
+  async (config) => {
+    const unsafeMethods = [
+      "post",
+      "put",
+      "patch",
+      "delete",
+    ];
 
-  console.log("CSRF TOKEN:", token);
+    const method =
+      config.method?.toLowerCase();
 
-  config.headers = config.headers || {};
+    let token = getCsrfToken();
 
-  if (token) {
-    config.headers["x-csrf-token"] = token;
-  }
+    const needsCsrf =
+      unsafeMethods.includes(
+        method || ""
+      );
 
-  return config;
-});
+    if (needsCsrf && !token) {
+      try {
+        const response =
+          await axios.get(
+            `${API_BASE_URL}/api/auth/csrf`,
+            {
+              withCredentials: true,
+            }
+          );
 
-api.interceptors.response.use(
-  (response) => {
-    console.log(
-      "RESPONSE CSRF HEADER:",
-      response.headers["x-csrf-token"]
-    );
+        token =
+          response.data.csrfToken;
 
-    console.log(
-      "RESPONSE BODY CSRF:",
-      response.data?.csrfToken
-    );
-
-    const headerToken =
-      response.headers["x-csrf-token"];
-
-    if (headerToken) {
-      setCsrfToken(headerToken);
+        setCsrfToken(token);
+      } catch (err) {
+        console.error(
+          "Failed to fetch CSRF",
+          err
+        );
+      }
     }
 
-    const bodyToken =
-      response.data?.csrfToken;
+    config.headers =
+      config.headers || {};
 
-    if (bodyToken) {
-      setCsrfToken(bodyToken);
+    if (token) {
+      config.headers[
+        "x-csrf-token"
+      ] = token;
     }
 
-    return response;
-  },
-  (error) => {
-    console.log(
-      "ERROR RESPONSE:",
-      error.response?.data
-    );
-
-    return Promise.reject(error);
+    return config;
   }
 );

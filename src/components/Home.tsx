@@ -1,8 +1,4 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { fetchProducts } from "../admin/state-management/productSlice";
-import { fetchCategories } from "../admin/state-management/categorySlice";
-import type { RootState, AppDispatch } from "../admin/store/store";
 import ProductCard from "../client/components/ProductCard";
 import {
   Search,
@@ -14,73 +10,13 @@ import {
   Filter,
   X,
   ChevronDown,
-  CircleStop,
-  BarChart3,
-  Zap,
-  Shirt,
-  Armchair,
-  Wind,
-  Gauge,
-  Package,
-  Car,
 } from "lucide-react";
 import { useListCouponsQuery } from "../services/couponApi";
 import type { Coupon } from "../types/coupon-types";
-
-/* =========================================================
-TYPES
-========================================================= */
-interface Category {
-  id: string;
-  name: string;
-  parentId?: string | null;
-}
-
-interface NestedCategory extends Category {
-  children: NestedCategory[];
-  icon: React.ReactNode;
-}
-
-/* =========================================================
-HELPERS: Category Tree & Icons
-========================================================= */
-const getCategoryIcon = (name: string): React.ReactNode => {
-  const icons: Record<string, React.ReactNode> = {
-    Engine: <Car size={16} className="text-emerald-600" />,
-    Brakes: <CircleStop size={16} className="text-emerald-600" />,
-    Suspension: <BarChart3 size={16} className="text-emerald-600" />,
-    Electrical: <Zap size={16} className="text-emerald-600" />,
-    Body: <Shirt size={16} className="text-emerald-600" />,
-    Interior: <Armchair size={16} className="text-emerald-600" />,
-    Exhaust: <Wind size={16} className="text-emerald-600" />,
-    Transmission: <Gauge size={16} className="text-emerald-600" />,
-  };
-  return icons[name] || <Package size={16} className="text-emerald-600" />;
-};
-
-const buildCategoryTree = (flatCategories: Category[]): NestedCategory[] => {
-  const map = new Map<string, NestedCategory>();
-  const roots: NestedCategory[] = [];
-
-  flatCategories.forEach((cat) => {
-    map.set(cat.id, {
-      ...cat,
-      children: [],
-      icon: getCategoryIcon(cat.name),
-    });
-  });
-
-  flatCategories.forEach((cat) => {
-    const node = map.get(cat.id)!;
-    if (cat.parentId && map.has(cat.parentId)) {
-      map.get(cat.parentId)!.children.push(node);
-    } else {
-      roots.push(node);
-    }
-  });
-
-  return roots;
-};
+import { useGetProductsQuery } from "../services/productApi";
+import { useGetCategoriesQuery } from "../services/categoryApi";
+import { transformCategoriesToNavbar } from "../client/helpers/category-helper";
+import type { Category } from "../services/categoryApi";
 
 /* =========================================================
 CAROUSEL COMPONENT
@@ -115,7 +51,7 @@ const HeroCarousel = ({ products }: { products: any[] }) => {
     return products.slice(0, 5).map((p) => ({
       id: p.id,
       title: p.name,
-      subtitle: p.brand?.name || "Premium Quality",
+      subtitle: "Premium Quality",
       image: p.medias?.[0]?.url || "/api/placeholder/600/400",
     }));
   }, [products]);
@@ -220,61 +156,62 @@ const ProductGridSkeleton = () => (
 );
 
 /* =========================================================
-CATEGORY TREE NODE (Recursive)
+COLLAPSIBLE CATEGORY GROUP COMPONENT
 ========================================================= */
-const CategoryTreeNode = ({
-  category,
+const CollapsibleCategoryGroup = ({
+  group,
   selectedCategory,
   onSelectCategory,
+  categories,
 }: {
-  category: NestedCategory;
+  group: { title: string; icon: React.ReactNode; items: string[] };
   selectedCategory: string | null;
   onSelectCategory: (id: string | null) => void;
+  categories: Category[];
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const hasChildren = category.children.length > 0;
+  const [isOpen, setIsOpen] = useState(true);
 
   return (
-    <div>
+    <div className="mb-2">
       <button
-        onClick={() => {
-          if (hasChildren) {
-            setIsOpen(!isOpen);
-          } else {
-            onSelectCategory(category.id);
-          }
-        }}
-        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition flex items-center gap-2 ${
-          selectedCategory === category.id
-            ? "bg-green-50 text-green-700 font-medium border-l-4 border-green-600"
-            : "text-gray-600 hover:bg-gray-50"
-        }`}
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 transition"
       >
-        {category.icon}
-        <span className="flex-1">{category.name}</span>
-        {hasChildren && (
-          <ChevronDown
-            size={14}
-            className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
-          />
-        )}
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+          {group.icon}
+          <span>{group.title}</span>
+        </div>
+        <ChevronDown
+          size={14}
+          className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+        />
       </button>
-      {hasChildren && isOpen && (
-        <div className="ml-6 pl-2 border-l border-gray-200 space-y-1">
-          {category.children.map((child) => (
-            <button
-              key={child.id}
-              onClick={() => onSelectCategory(child.id)}
-              className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition flex items-center gap-2 ${
-                selectedCategory === child.id
-                  ? "text-green-700 font-medium"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
-              {child.name}
-            </button>
-          ))}
+      
+      {isOpen && (
+        <div className="ml-6 pl-2 border-l border-gray-200 space-y-1 mt-1">
+          {group.items.map((itemName) => {
+            const category = categories.find(
+              (cat) => cat.name === itemName && cat.isActive
+            );
+            return (
+              <button
+                key={itemName}
+                onClick={() => {
+                  if (category) {
+                    onSelectCategory(category.id);
+                  }
+                }}
+                className={`w-full text-left px-3 py-1.5 rounded-lg text-sm transition flex items-center gap-2 ${
+                  selectedCategory === category?.id
+                    ? "text-green-700 font-medium"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                {itemName}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -282,7 +219,7 @@ const CategoryTreeNode = ({
 };
 
 /* =========================================================
-SIDEBAR COMPONENT (with category tree)
+SIDEBAR COMPONENT
 ========================================================= */
 const Sidebar = ({
   categories,
@@ -297,7 +234,10 @@ const Sidebar = ({
   coupons: Coupon[];
   couponsLoading: boolean;
 }) => {
-  const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
+  const navbarCategories = useMemo(
+    () => transformCategoriesToNavbar(categories),
+    [categories]
+  );
 
   const specialOffers = [
     {
@@ -325,7 +265,7 @@ const Sidebar = ({
 
   return (
     <aside className="space-y-6">
-      {/* Categories Section with Tree */}
+      {/* Categories Section */}
       <div className="bg-white rounded-xl shadow-sm p-4">
         <h3 className="font-bold text-lg text-gray-800 mb-3 flex items-center gap-2">
           <Tag size={18} className="text-green-600" />
@@ -342,12 +282,14 @@ const Sidebar = ({
           >
             All Products
           </button>
-          {categoryTree.map((cat) => (
-            <CategoryTreeNode
-              key={cat.id}
-              category={cat}
+          
+          {navbarCategories.map((group) => (
+            <CollapsibleCategoryGroup
+              key={group.title}
+              group={group}
               selectedCategory={selectedCategory}
               onSelectCategory={onSelectCategory}
+              categories={categories}
             />
           ))}
         </div>
@@ -438,20 +380,22 @@ const Sidebar = ({
 MAIN HOME COMPONENT
 ========================================================= */
 export default function Home() {
-  const dispatch = useDispatch<AppDispatch>();
-  const { products, loading, error } = useSelector(
-    (state: RootState) => state.adminProducts
-  );
-  const { categories: categoryList } = useSelector(
-    (state: RootState) => state.categories
-  );
+  const {
+    data: products = [],
+    isLoading: productsLoading,
+    error: productsError,
+  } = useGetProductsQuery();
+
+  const {
+    data: categoriesList = [],
+    isLoading: categoriesLoading,
+  } = useGetCategoriesQuery();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
-  // Fetch coupons
   const { data: couponsData, isLoading: couponsLoading } = useListCouponsQuery({
     page: 1,
     limit: 5,
@@ -462,13 +406,11 @@ export default function Home() {
     return couponsData?.coupons || [];
   }, [couponsData]);
 
-  // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Filter products
   const filteredProducts = useMemo(() => {
     let filtered = products;
     if (debouncedSearch) {
@@ -477,22 +419,21 @@ export default function Home() {
       );
     }
     if (selectedCategory) {
-      filtered = filtered.filter((p) => p.category?.id === selectedCategory);
+      filtered = filtered.filter((p) => p.categoryId === selectedCategory);
     }
     return filtered;
   }, [products, debouncedSearch, selectedCategory]);
 
-  // Related products
   const relatedProducts = useMemo(() => {
     if (products.length === 0) return [];
     let targetCategoryId = selectedCategory;
     if (!targetCategoryId) {
       const categoryCount = new Map<string, number>();
       products.forEach((p) => {
-        if (p.category?.id) {
+        if (p.categoryId) {
           categoryCount.set(
-            p.category.id,
-            (categoryCount.get(p.category.id) || 0) + 1
+            p.categoryId,
+            (categoryCount.get(p.categoryId) || 0) + 1
           );
         }
       });
@@ -506,12 +447,11 @@ export default function Home() {
     return products
       .filter(
         (p) =>
-          p.category?.id === targetCategoryId && p.id !== filteredProducts[0]?.id
+          p.categoryId === targetCategoryId && p.id !== filteredProducts[0]?.id
       )
       .slice(0, 6);
   }, [products, selectedCategory, filteredProducts]);
 
-  // Recommended products
   const recommendedProducts = useMemo(() => {
     if (products.length === 0) return [];
     const withStock = products.filter(
@@ -522,39 +462,24 @@ export default function Home() {
     return sorted.slice(0, 6);
   }, [products]);
 
-  useEffect(() => {
-    dispatch(fetchProducts());
-    dispatch(fetchCategories());
-  }, [dispatch]);
-
   const clearFilters = () => {
     setSearchTerm("");
     setDebouncedSearch("");
     setSelectedCategory(null);
   };
 
-  // Loading & Error States
-  if (loading && products.length === 0) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="h-64 bg-gray-200 rounded-2xl animate-pulse mb-8" />
-          <div className="grid lg:grid-cols-[280px_1fr] gap-8">
-            <div className="space-y-6">
-              <div className="h-64 bg-white rounded-xl animate-pulse" />
-              <div className="h-48 bg-white rounded-xl animate-pulse" />
-            </div>
-            <div className="space-y-6">
-              <div className="h-10 bg-gray-200 rounded-lg w-48 animate-pulse" />
-              <ProductGridSkeleton />
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const isLoading = (productsLoading || categoriesLoading) && products.length === 0;
 
-  if (error && !loading) {
+  const errorMessage = (() => {
+    if (!productsError) return null;
+    if (typeof productsError === "string") return productsError;
+    if ("message" in productsError) return productsError.message;
+    if ("data" in productsError && productsError.data && typeof productsError.data === "object" && "message" in productsError.data)
+      return (productsError.data as any).message;
+    return "Please try again later.";
+  })();
+
+  if (productsError && !productsLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full text-center">
@@ -576,9 +501,9 @@ export default function Home() {
           <h2 className="text-xl font-semibold text-gray-900 mb-2">
             Unable to load products
           </h2>
-          <p className="text-gray-500 mb-6">{error}</p>
+          <p className="text-gray-500 mb-6">{errorMessage}</p>
           <button
-            onClick={() => dispatch(fetchProducts())}
+            onClick={() => window.location.reload()}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
           >
             Try Again
@@ -588,10 +513,29 @@ export default function Home() {
     );
   }
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          <div className="h-64 bg-gray-200 rounded-2xl animate-pulse mb-8" />
+          <div className="grid lg:grid-cols-[280px_1fr] gap-8">
+            <div className="space-y-6">
+              <div className="h-64 bg-white rounded-xl animate-pulse" />
+              <div className="h-48 bg-white rounded-xl animate-pulse" />
+            </div>
+            <div className="space-y-6">
+              <div className="h-10 bg-gray-200 rounded-lg w-48 animate-pulse" />
+              <ProductGridSkeleton />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-6 md:py-8">
-        {/* Mobile Filter Toggle */}
         <div className="lg:hidden mb-4">
           <button
             onClick={() => setShowMobileFilters(!showMobileFilters)}
@@ -603,12 +547,11 @@ export default function Home() {
         </div>
 
         <div className="flex flex-col lg:flex-row gap-8">
-          {/* Sidebar - hidden on mobile unless toggled */}
           <div
             className={`${showMobileFilters ? "block" : "hidden"} lg:block lg:w-80 flex-shrink-0`}
           >
             <Sidebar
-              categories={categoryList}
+              categories={categoriesList}
               selectedCategory={selectedCategory}
               onSelectCategory={(id) => {
                 setSelectedCategory(id);
@@ -619,12 +562,9 @@ export default function Home() {
             />
           </div>
 
-          {/* Main Content */}
           <div className="flex-1 space-y-8">
-            {/* Hero Carousel */}
             <HeroCarousel products={products} />
 
-            {/* Search & Filter Bar */}
             <div className="bg-white rounded-xl shadow-sm p-4 flex flex-col sm:flex-row gap-3 items-center justify-between">
               <div className="relative flex-1 max-w-md w-full">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
@@ -654,15 +594,13 @@ export default function Home() {
               )}
             </div>
 
-            {/* Main Product Section */}
             <section>
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center mb-4">
                 <h2 className="text-xl md:text-2xl font-bold text-gray-900">
                   {debouncedSearch || selectedCategory
                     ? `Found ${filteredProducts.length} product${filteredProducts.length !== 1 ? "s" : ""}`
                     : "Featured Products"}
                 </h2>
-                <p className="text-sm text-gray-500">{filteredProducts.length} items</p>
               </div>
 
               {filteredProducts.length === 0 ? (
@@ -690,7 +628,6 @@ export default function Home() {
               )}
             </section>
 
-            {/* Related Products Section */}
             {relatedProducts.length > 0 && (
               <section>
                 <div className="flex items-center gap-2 mb-4">
@@ -707,7 +644,6 @@ export default function Home() {
               </section>
             )}
 
-            {/* Recommended Products Section */}
             {recommendedProducts.length > 0 && (
               <section>
                 <div className="flex items-center gap-2 mb-4">
@@ -726,14 +662,6 @@ export default function Home() {
           </div>
         </div>
       </div>
-
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-100 mt-12 py-8">
-        <div className="max-w-7xl mx-auto px-4 text-center text-sm text-gray-500">
-          <p>Need help finding the right part? Contact our experts</p>
-          <p className="mt-2">© 2025 MOgrace Auto Parts. All rights reserved.</p>
-        </div>
-      </footer>
     </div>
   );
 }

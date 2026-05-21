@@ -3,7 +3,6 @@ import {
   Heart,
   Check,
   Package,
-  AlertCircle,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState, useMemo } from "react";
@@ -18,51 +17,53 @@ import {
   useGetWishlistQuery,
 } from "../../services/wishlistApi";
 
+/* PRODUCT TYPE (from actual API) */
+import type { Product } from "../../services/productApi";
+
 /* =========================================================
-TYPES
+PROPS
 ========================================================= */
-
-interface Product {
-  id: string;
-  name: string;
-  slug: string;
-  description: string | null;
-  brand: { id: string; name: string } | null;
-  category: { id: string; name: string } | null;
-  oemNumbers: { oemNumber: string }[];
-  variants: any[];
-  medias: { url: string }[];
-  specifications: { name: string; value: string }[];
-}
-
 interface Props {
   product: Product;
 }
 
 /* =========================================================
+HELPER: Extract OEM numbers safely
+========================================================= */
+function extractOemNumbers(oemNumbers: unknown): string[] {
+  if (!Array.isArray(oemNumbers)) return [];
+
+  const result: string[] = [];
+
+  for (const item of oemNumbers) {
+    if (typeof item === "string") {
+      const trimmed = item.trim();
+      if (trimmed) result.push(trimmed);
+    } else if (item && typeof item === "object") {
+      const obj = item as Record<string, unknown>;
+      const oemValue = obj.oemNumber;
+      if (typeof oemValue === "string") {
+        const trimmed = oemValue.trim();
+        if (trimmed) result.push(trimmed);
+      }
+    }
+  }
+
+  return result;
+}
+
+/* =========================================================
 COMPONENT
 ========================================================= */
-
 export default function ProductCard({ product }: Props) {
   const navigate = useNavigate();
 
-  //////////////////////////////////////////////////////////
   // RTK QUERY HOOKS
-  //////////////////////////////////////////////////////////
+  const [addToCart, { isLoading: adding }] = useAddToCartMutation();
+  const [toggleWishlist] = useToggleWishlistMutation();
+  const { data: wishlistData } = useGetWishlistQuery();
 
-  const [addToCart, { isLoading: adding }] =
-    useAddToCartMutation();
-
-  const [toggleWishlist] =
-    useToggleWishlistMutation();
-
-  const { data: wishlistData } =
-    useGetWishlistQuery();
-
-  //////////////////////////////////////////////////////////
-  // WISHLIST STATE (GLOBAL ONLY)
-  //////////////////////////////////////////////////////////
-
+  // Wishlist state
   const isWishlisted = useMemo(() => {
     return (
       wishlistData?.items?.some(
@@ -71,306 +72,196 @@ export default function ProductCard({ product }: Props) {
     );
   }, [wishlistData, product.id]);
 
-  const [heartAnimating, setHeartAnimating] =
-    useState(false);
-
-  //////////////////////////////////////////////////////////
-  // LOCAL UI STATE
-  //////////////////////////////////////////////////////////
-
+  const [heartAnimating, setHeartAnimating] = useState(false);
   const [added, setAdded] = useState(false);
 
   const image = product.medias?.[0]?.url;
   const firstVariant = product.variants?.[0];
   const variantId = firstVariant?.id;
 
-  //////////////////////////////////////////////////////////
-  // OEM DISPLAY
-  //////////////////////////////////////////////////////////
+  // Price formatting – Naira (₦)
+  const displayPrice = useMemo(() => {
+    const price = firstVariant?.price;
+    if (typeof price === "number") {
+      return new Intl.NumberFormat("en-NG", {
+        style: "currency",
+        currency: "NGN",
+        minimumFractionDigits: 0,   // Hide .00 for whole Naira
+        maximumFractionDigits: 0,
+      }).format(price);
+    }
+    if (typeof price === "string") {
+      // If the API returns a string like "5000", prefix with ₦ symbol
+      return `₦${price}`;
+    }
+    return "Price N/A";
+  }, [firstVariant]);
 
+  // OEM display (safe extraction)
   const oemDisplay = useMemo(() => {
-    if (!product.oemNumbers?.length) return null;
-
-    const cleaned = product.oemNumbers
-      .map((o) => o.oemNumber?.trim())
-      .filter(Boolean);
-
+    const cleaned = extractOemNumbers(product.oemNumbers);
     if (!cleaned.length) return null;
 
     const visible = cleaned.slice(0, 2).join(", ");
-    const extra =
-      cleaned.length > 2
-        ? ` +${cleaned.length - 2}`
-        : "";
-
+    const extra = cleaned.length > 2 ? ` +${cleaned.length - 2}` : "";
     return visible + extra;
   }, [product.oemNumbers]);
 
-  //////////////////////////////////////////////////////////
-  // STOCK
-  //////////////////////////////////////////////////////////
-
+  // Stock status
   const stockStatus = useMemo(() => {
     if (!firstVariant?.inventories?.length) {
-      return {
-        available: false,
-        totalStock: 0,
-        isLowStock: false,
-      };
+      return { available: false, totalStock: 0, isLowStock: false };
     }
 
-    const totalStock =
-      firstVariant.inventories.reduce(
-        (sum: number, inv: any) =>
-          sum +
-          (inv.stock - (inv.reserved ?? 0)),
-        0
-      );
+    const totalStock = firstVariant.inventories.reduce(
+      (sum: number, inv: any) => sum + (inv.stock - (inv.reserved ?? 0)),
+      0
+    );
 
     return {
       available: totalStock > 0,
       totalStock,
-      isLowStock:
-        totalStock > 0 && totalStock <= 5,
+      isLowStock: totalStock > 0 && totalStock <= 5,
     };
   }, [firstVariant]);
 
-  //////////////////////////////////////////////////////////
-  // ADD TO CART (RTK QUERY)
-  //////////////////////////////////////////////////////////
-
-  const handleAddToCart = async (
-    e: React.MouseEvent
-  ) => {
+  // Add to cart handler
+  const handleAddToCart = async (e: React.MouseEvent) => {
     e.stopPropagation();
-
-    if (!variantId || !stockStatus.available)
-      return;
+    if (!variantId || !stockStatus.available) return;
 
     try {
-      await addToCart({
-        variantId,
-        quantity: 1,
-      }).unwrap();
-
+      await addToCart({ variantId, quantity: 1 }).unwrap();
       setAdded(true);
-
       setTimeout(() => setAdded(false), 1500);
     } catch (err) {
       console.error("Add to cart failed:", err);
     }
   };
 
-  //////////////////////////////////////////////////////////
-  // WISHLIST TOGGLE (RTK QUERY)
-  //////////////////////////////////////////////////////////
-
-  const handleWishlist = async (
-    e: React.MouseEvent
-  ) => {
+  // Wishlist toggle handler
+  const handleWishlist = async (e: React.MouseEvent) => {
     e.stopPropagation();
-
     setHeartAnimating(true);
-
-    setTimeout(
-      () => setHeartAnimating(false),
-      300
-    );
+    setTimeout(() => setHeartAnimating(false), 300);
 
     try {
-      await toggleWishlist({
-        productId: product.id,
-      }).unwrap();
+      await toggleWishlist({ productId: product.id }).unwrap();
     } catch (err) {
-      console.error(
-        "Wishlist error:",
-        err
-      );
+      console.error("Wishlist error:", err);
     }
   };
 
-  //////////////////////////////////////////////////////////
-  // RENDER
-  //////////////////////////////////////////////////////////
-
   return (
     <div
-      onClick={() =>
-        navigate(`/product/${product.id}`)
-      }
+      onClick={() => navigate(`/product/${product.id}`)}
       className="
-        group
-        flex
-        h-full
-        min-h-105
-        flex-col
-        overflow-hidden
-        rounded-2xl
-        border
-        border-gray-100
-        bg-white
-        shadow-lg
-        transition-all
-        duration-300
+        group relative flex flex-col
+        overflow-hidden rounded-xl
+        border border-gray-200 bg-white
+        shadow-sm transition-all duration-200
+        hover:shadow-md hover:border-green-200
         cursor-pointer
-        hover:-translate-y-1
-        hover:border-green-200
-        hover:shadow-2xl
       "
     >
-      {/* IMAGE */}
-      <div className="
-        relative
-        aspect-4/3
-        w-full
-        overflow-hidden
-        bg-linear-to-br
-        from-gray-50
-        to-gray-100
-        shrink-0
-      ">
+      {/* IMAGE SECTION - SQUARE ASPECT, COMPACT */}
+      <div className="relative aspect-square w-full overflow-hidden bg-gray-100">
         {image ? (
           <img
             src={image}
             alt={product.name}
-            className="
-              h-full
-              w-full
-              object-cover
-              transition-transform
-              duration-500
-              group-hover:scale-110
-            "
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
-          <div className="
-            flex
-            h-full
-            items-center
-            justify-center
-            text-gray-400
-          ">
-            <Package size={48} />
+          <div className="flex h-full items-center justify-center text-gray-400">
+            <Package size={32} />
           </div>
         )}
 
-        {/* WISHLIST */}
+        {/* WISHLIST BUTTON - SMALLER */}
         <button
           onClick={handleWishlist}
           className={`
-            absolute top-3 right-3 rounded-full
-            bg-white/90 p-2 shadow-md
+            absolute top-2 right-2 rounded-full
+            bg-white/80 p-1.5 shadow-sm backdrop-blur-sm
             transition-transform
             ${heartAnimating ? "scale-125" : "scale-100"}
           `}
         >
           <Heart
-            size={18}
+            size={16}
             className={`
-              transition-all duration-300
+              transition-all duration-200
               ${
                 isWishlisted
-                  ? "fill-red-500 text-red-500 scale-110"
+                  ? "fill-amber-500 text-amber-500"
                   : "text-gray-600"
               }
             `}
           />
         </button>
 
-        {/* STOCK */}
+        {/* STOCK BADGES - COMPACT */}
         {!stockStatus.available && (
-          <div className="
-            absolute top-3 left-3
-            rounded-lg bg-red-500
-            px-2 py-1 text-xs text-white
-          ">
+          <div className="absolute top-2 left-2 rounded-md bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
             Out of Stock
           </div>
         )}
-
         {stockStatus.isLowStock && (
-          <div className="
-            absolute top-3 left-3
-            rounded-lg bg-orange-500
-            px-2 py-1 text-xs text-white
-          ">
-            Low Stock ({stockStatus.totalStock})
+          <div className="absolute top-2 left-2 rounded-md bg-orange-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
+            Only {stockStatus.totalStock} left
           </div>
         )}
       </div>
 
-      {/* CONTENT */}
-      <div className="flex flex-1 flex-col justify-between p-4">
-        <div className="space-y-2">
-          <h3 className="
-            line-clamp-2 min-h-12
-            text-sm font-semibold
-            text-gray-900
-          ">
-            {product.name}
-          </h3>
+      {/* CONTENT SECTION - TIGHT PADDING, MICRO LAYOUT */}
+      <div className="flex flex-col gap-1.5 p-3">
+        {/* PRODUCT TITLE */}
+        <h3 className="line-clamp-2 text-sm font-medium leading-tight text-gray-800">
+          {product.name}
+        </h3>
 
-          {oemDisplay && (
-            <p className="
-              text-xs text-gray-400
-              line-clamp-1
-            ">
-              {oemDisplay}
-            </p>
-          )}
-        </div>
+        {/* OEM NUMBERS */}
+        {oemDisplay && (
+          <p className="line-clamp-1 text-xs text-gray-400">
+            {oemDisplay}
+          </p>
+        )}
 
-        {/* FOOTER */}
-        <div className="mt-4 space-y-3">
+        {/* PRICE & ADD TO CART ROW */}
+        <div className="mt-1 flex items-center justify-between gap-2">
+          <span className="text-base font-bold text-green-700">
+            {displayPrice}
+          </span>
+
           <button
             onClick={handleAddToCart}
-            disabled={
-              !variantId ||
-              adding ||
-              !stockStatus.available
-            }
+            disabled={!variantId || adding || !stockStatus.available}
             className={`
-              flex w-full items-center justify-center
-              rounded-xl py-3 transition-all
+              flex items-center justify-center gap-1
+              rounded-lg px-3 py-1.5 text-xs font-medium
+              transition-all active:scale-95
               ${
                 added
-                  ? "bg-green-700"
+                  ? "bg-green-700 text-white"
                   : stockStatus.available
-                  ? "bg-green-600 hover:bg-green-700"
-                  : "bg-gray-300"
+                  ? "bg-green-600 text-white hover:bg-green-700"
+                  : "cursor-not-allowed bg-gray-200 text-gray-500"
               }
             `}
           >
             {added ? (
-              <Check
-                size={18}
-                className="text-white"
-              />
+              <>
+                <Check size={14} /> Added
+              </>
             ) : adding ? (
-              <div className="
-                h-5 w-5 animate-spin
-                rounded-full border-2
-                border-white border-t-transparent
-              " />
+              <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
             ) : (
-              <ShoppingCartIcon
-                size={18}
-                className="text-white"
-              />
+              <>
+                <ShoppingCartIcon size={14} /> Add
+              </>
             )}
           </button>
-
-          <div className="min-h-5">
-            {stockStatus.available && (
-              <div className="
-                flex items-center gap-1
-                text-xs text-green-600
-              ">
-                <AlertCircle size={10} />
-                {stockStatus.totalStock} in stock
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </div>

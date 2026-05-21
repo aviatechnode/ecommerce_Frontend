@@ -19,11 +19,7 @@ import {
 
 import { useNavigate } from "react-router-dom";
 
-import { useDispatch, useSelector } from "react-redux";
-import type { AppDispatch, RootState } from "../../admin/store/store";
-
 import { transformCategoriesToNavbar } from "../helpers/category-helper";
-import { fetchCategories } from "../../admin/state-management/categorySlice";
 
 import {
   useMeQuery,
@@ -32,6 +28,9 @@ import {
 
 import { useCartCount } from "../../admin/store/useCartCount";
 import { useWishlistCount } from "../../admin/store/useWishlistCount";
+
+// ✅ RTK Query hook for categories
+import { useGetCategoriesQuery } from "../../services/categoryApi";
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
@@ -47,14 +46,8 @@ const Navbar = () => {
   const user = meData;
   const [signout] = useSignoutMutation();
 
-  const categories = useSelector(
-    (state: RootState) => state.categories.categories
-  );
-  const dispatch = useDispatch<AppDispatch>();
-
-  useEffect(() => {
-    dispatch(fetchCategories());
-  }, [dispatch]);
+  // ✅ Replace Redux slice with RTK Query
+  const { data: categories = [] } = useGetCategoriesQuery();
 
   const navbarCategories = useMemo(() => {
     return transformCategoriesToNavbar(categories);
@@ -73,8 +66,12 @@ const Navbar = () => {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const cartCount = useCartCount();
-  const wishListCount = useWishlistCount();
+  const rawCartCount = useCartCount();
+  const rawWishlistCount = useWishlistCount();
+  
+  // ✅ Ensure default value is zero across board
+  const cartCount = rawCartCount ?? 0;
+  const wishListCount = rawWishlistCount ?? 0;
 
   const handleAccountClick = async (action: string) => {
     setAccountOpen(false);
@@ -140,7 +137,7 @@ const Navbar = () => {
               </div>
             </div>
 
-            {/* DESKTOP ICONS */}
+            {/* DESKTOP ICONS - Cart moved left next to Wishlist */}
             <div className="hidden md:flex items-center gap-5">
               <Car
                 size={20}
@@ -153,11 +150,21 @@ const Navbar = () => {
                 onClick={() => handleIconNavigation("/wishlist")}
               >
                 <Heart size={20} />
-                {wishListCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-xs px-1.5 rounded-full shadow-md">
-                    {wishListCount}
-                  </span>
-                )}
+                {/* ✅ Unified counter color (amber-500) and always visible with default zero */}
+                <span className="absolute -top-2 -right-2 bg-amber-500 text-white text-xs px-1.5 rounded-full shadow-md min-w-[18px] text-center leading-tight">
+                  {wishListCount}
+                </span>
+              </div>
+
+              {/* CART - Now placed right after wishlist, before account */}
+              <div
+                className="relative cursor-pointer text-gray-600 hover:text-emerald-600 transition-all hover:scale-110"
+                onClick={() => handleIconNavigation("/cart")}
+              >
+                <ShoppingCart size={22} />
+                <span className="absolute -top-2 -right-2 bg-amber-500 text-white text-xs px-1.5 rounded-full shadow-md min-w-[18px] text-center leading-tight">
+                  {cartCount}
+                </span>
               </div>
 
               {/* ACCOUNT DROPDOWN - FIXED Z-INDEX */}
@@ -235,17 +242,6 @@ const Navbar = () => {
                   )}
                 </div>
               </div>
-
-              {/* CART - ALWAYS SHOW BADGE (including 0) */}
-              <div
-                className="relative cursor-pointer text-gray-600 hover:text-emerald-600 transition-all hover:scale-110"
-                onClick={() => handleIconNavigation("/cart")}
-              >
-                <ShoppingCart size={22} />
-                <span className="absolute -top-2 -right-2 bg-amber-500 text-white text-xs px-1.5 rounded-full shadow-md">
-                  {cartCount}
-                </span>
-              </div>
             </div>
 
             {/* MOBILE BUTTON */}
@@ -287,7 +283,7 @@ const Navbar = () => {
                 <Info size={16} /> About
               </button>
               <button
-                onClick={() => navigate("/contact")}
+                onClick={() => navigate("/feedback")}
                 className="flex items-center gap-1.5 hover:text-emerald-600 transition-colors"
               >
                 <Mail size={16} /> Contact Us
@@ -336,26 +332,32 @@ const Navbar = () => {
         }`}
       >
         <div className="p-5 flex flex-col gap-5">
-          {/* Icons row */}
+          {/* Icons row - Unified counter colors for both cart and wishlist */}
           <div className="flex justify-around pb-3 border-b border-gray-100">
             <Car
               size={24}
               className="text-gray-600 hover:text-emerald-600 cursor-pointer transition"
               onClick={() => handleIconNavigation("/")}
             />
-            <Heart
-              size={24}
-              className="text-gray-600 hover:text-emerald-600 cursor-pointer transition"
-              onClick={() => handleIconNavigation("/wishlist")}
-            />
+            {/* Wishlist with badge on mobile - unified amber-500 color */}
+            <div className="relative">
+              <Heart
+                size={24}
+                className="text-gray-600 hover:text-emerald-600 cursor-pointer transition"
+                onClick={() => handleIconNavigation("/wishlist")}
+              />
+              <span className="absolute -top-2 -right-2 bg-amber-500 text-white text-xs px-1.5 rounded-full shadow-md min-w-[18px] text-center leading-tight">
+                {wishListCount}
+              </span>
+            </div>
+            {/* Cart with badge on mobile - unified amber-500 color */}
             <div className="relative">
               <ShoppingCart
                 size={24}
                 className="text-gray-600 hover:text-emerald-600 cursor-pointer transition"
                 onClick={() => handleIconNavigation("/cart")}
               />
-              {/* Mobile cart badge - always show */}
-              <span className="absolute -top-2 -right-2 bg-amber-500 text-white text-xs px-1.5 rounded-full">
+              <span className="absolute -top-2 -right-2 bg-amber-500 text-white text-xs px-1.5 rounded-full shadow-md min-w-[18px] text-center leading-tight">
                 {cartCount}
               </span>
             </div>
@@ -370,7 +372,7 @@ const Navbar = () => {
               <Info size={18} /> About
             </button>
             <button
-              onClick={() => handleIconNavigation("/contact")}
+              onClick={() => handleIconNavigation("/feedback")}
               className="flex items-center gap-3 py-2 text-gray-700 hover:text-emerald-600 transition"
             >
               <Mail size={18} /> Contact Us
