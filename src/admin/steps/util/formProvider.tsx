@@ -1,772 +1,221 @@
-import { useEffect, useMemo, useRef } from "react";
-
-import {
-  useForm,
-  useFieldArray,
-  useWatch,
-} from "react-hook-form";
-
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-
+import { createProductSchema } from "../../../schemas/product.schema";
 import {
-  createProductSchema,
-  type CreateProductInput,
-} from "../../../schemas/product.schema";
+  useCreateProductMutation,
+  useUpdateProductMutation,
+} from "../../../services/productApi";
+import type { z } from "zod";
 
-import { useCreateProductMutation } from "../../../services/productApi";
-import { useProductBuilder } from "../../store/productBuilderStore";
+export type CreateProductFormValues = z.input<typeof createProductSchema>;
+type CreateProductInput = z.infer<typeof createProductSchema>;
 
-/* =========================================================
-   TYPES
-========================================================= */
-
-type FormValues = z.input<typeof createProductSchema>;
-type ParsedValues = z.output<typeof createProductSchema>;
-
-/* =========================================================
-   HELPERS
-========================================================= */
-
-const safeNumber = (
-  value: unknown,
-  fallback?: number
-): number | undefined => {
-  if (
-    value === null ||
-    value === undefined ||
-    value === ""
-  ) {
-    return fallback;
-  }
-
-  const n =
-    typeof value === "number"
-      ? value
-      : Number(value);
-
-  return Number.isFinite(n) ? n : fallback;
+export const emptyProduct: CreateProductFormValues = {
+  name: "",
+  brandId: "",
+  categoryId: "",
+  description: "",
+  isActive: true,
+  isFeatured: false,
+  searchKeywords: "",
+  oemNumbers: [],
+  specifications: [],
+  productFitments: [],
+  medias: [],
+  variants: [],
 };
 
-const safeString = (
-  value: unknown
-): string | undefined => {
-  if (typeof value !== "string") {
-    return undefined;
+/**
+ * Recursively removes server-only fields (id, createdAt, updatedAt, deletedAt).
+ * Does NOT remove warehouseId.
+ */
+function stripServerFields<T>(data: T): T {
+  if (Array.isArray(data)) {
+    return data.map((item) => stripServerFields(item)) as T;
   }
+  if (data && typeof data === "object" && data !== null) {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+      // Only remove exact id, createdAt, updatedAt, deletedAt
+      if (!["id", "createdAt", "updatedAt", "deletedAt"].includes(key)) {
+        result[key] = stripServerFields(value);
+      }
+    }
+    return result as T;
+  }
+  return data;
+}
 
-  const trimmed = value.trim();
+/**
+ * Maps API product to form values.
+ * Keeps warehouseId exactly as returned from the backend.
+ */
+function mapApiProductToForm(product: any): CreateProductFormValues {
+  const stripped = stripServerFields(product);
+  console.log("Mapped product for form:", stripped); // Debug
 
-  return trimmed.length
-    ? trimmed
-    : undefined;
-};
+  return {
+    name: stripped.name ?? "",
+    description: stripped.description ?? "",
+    brandId: stripped.brandId ?? "",
+    categoryId: stripped.categoryId ?? "",
+    isActive: stripped.isActive ?? true,
+    isFeatured: stripped.isFeatured ?? false,
+    searchKeywords: stripped.searchKeywords ?? "",
+    oemNumbers: stripped.oemNumbers ?? [],
+    specifications: stripped.specifications ?? [],
+    productFitments: stripped.productFitments ?? [],
+    medias: stripped.medias ?? [],
+    variants: (stripped.variants || []).map((variant: any) => ({
+      name: variant.name,
+      sku: variant.sku,
+      price: variant.price,
+      costPrice: variant.costPrice,
+      compareAtPrice: variant.compareAtPrice,
+      weight: variant.weight,
+      length: variant.length,
+      width: variant.width,
+      height: variant.height,
+      barcode: variant.barcode,
+      isActive: variant.isActive ?? true,
+      attributes: (variant.attributes || []).map((attr: any) => ({
+        valueId: attr.valueId,
+      })),
+      inventories: (variant.inventories || []).map((inv: any) => {
+        // warehouseId is a direct field from Prisma (foreign key)
+        const warehouseId = inv.warehouseId ?? inv.warehouse?.id ?? "";
+        console.log(`Inventory warehouseId: ${warehouseId}`); // Debug
+        return {
+          warehouseId,
+          stock: inv.stock ?? 0,
+          reserved: inv.reserved ?? 0,
+          threshold: inv.threshold ?? 0,
+        };
+      }),
+    })),
+  };
+}
 
-/* =========================================================
-   HOOK
-========================================================= */
+/**
+ * Cleans variant for API submission.
+ */
+function cleanVariant(variant: any): any | null {
+  if (!variant.name || !variant.sku || variant.price === undefined) {
+    return null;
+  }
+  return {
+    name: variant.name,
+    sku: variant.sku,
+    price: Number(variant.price),
+    costPrice: variant.costPrice !== undefined ? Number(variant.costPrice) : undefined,
+    compareAtPrice: variant.compareAtPrice !== undefined ? Number(variant.compareAtPrice) : undefined,
+    weight: variant.weight !== undefined ? Number(variant.weight) : undefined,
+    length: variant.length !== undefined ? Number(variant.length) : undefined,
+    width: variant.width !== undefined ? Number(variant.width) : undefined,
+    height: variant.height !== undefined ? Number(variant.height) : undefined,
+    barcode: variant.barcode || undefined,
+    isActive: variant.isActive ?? true,
+    attributes: (variant.attributes || [])
+      .filter((attr: any) => attr.valueId)
+      .map(({ valueId }: any) => ({ valueId })),
+    inventories: (variant.inventories || [])
+      .filter((inv: any) => inv.warehouseId && inv.stock !== undefined)
+      .map((inv: any) => ({
+        warehouseId: inv.warehouseId,
+        stock: Number(inv.stock),
+        reserved: inv.reserved !== undefined ? Number(inv.reserved) : 0,
+        threshold: inv.threshold !== undefined ? Number(inv.threshold) : undefined,
+      })),
+  };
+}
+
+/**
+ * Sanitizes form values for API submission.
+ */
+export function sanitizeProductForApi(values: CreateProductFormValues): CreateProductInput {
+  const emptyToUndef = (val: any) => (val === "" ? undefined : val);
+
+  const result: any = {
+    name: values.name?.trim() || undefined,
+    description: emptyToUndef(values.description),
+    brandId: values.brandId?.trim() || undefined,
+    categoryId: values.categoryId?.trim() || undefined,
+    isActive: values.isActive ?? true,
+    isFeatured: values.isFeatured ?? false,
+    searchKeywords: emptyToUndef(values.searchKeywords),
+    oemNumbers: (values.oemNumbers || [])
+      .filter((oem) => oem.oemNumber?.trim())
+      .map(({ oemNumber }) => ({ oemNumber: oemNumber.trim() })),
+    specifications: (values.specifications || [])
+      .filter((spec) => spec.name?.trim() && spec.value?.trim())
+      .map(({ name, value }) => ({ name: name.trim(), value: value.trim() })),
+    productFitments: (values.productFitments || [])
+      .filter((fit) => fit.trimId || fit.makeId || fit.isUniversal)
+      .map((fit) => ({
+        level: fit.level,
+        makeId: fit.makeId || undefined,
+        modelId: fit.modelId || undefined,
+        generationId: fit.generationId || undefined,
+        engineId: fit.engineId || undefined,
+        trimId: fit.trimId || undefined,
+        yearStart: fit.yearStart ? Number(fit.yearStart) : undefined,
+        yearEnd: fit.yearEnd ? Number(fit.yearEnd) : undefined,
+        notes: emptyToUndef(fit.notes),
+        position: emptyToUndef(fit.position),
+        quantityRequired: fit.quantityRequired ? Number(fit.quantityRequired) : undefined,
+        isUniversal: fit.isUniversal ?? false,
+      })),
+    medias: (values.medias || [])
+      .filter((media) => media.url?.trim())
+      .map(({ url, type, position }) => ({
+        url: url.trim(),
+        type: type || "IMAGE",
+        position: position ?? 0,
+      })),
+    variants: (values.variants || [])
+      .map(cleanVariant)
+      .filter((v) => v !== null),
+  };
+
+  Object.keys(result).forEach((key) => {
+    if (result[key] === undefined) delete result[key];
+  });
+
+  return result as CreateProductInput;
+}
 
 export function useProductForm() {
-  const [createProduct] =
-    useCreateProductMutation();
+  const [createProduct] = useCreateProductMutation();
+  const [updateProduct] = useUpdateProductMutation();
 
-  const store = useProductBuilder();
-
-  /* =========================================================
-     DEFAULT VALUES
-  ========================================================= */
-
-  const defaultValues: FormValues = useMemo(
-    () => ({
-      id: store.product.id ?? undefined,
-
-      slug: store.product.slug ?? "",
-
-      name: store.product.name ?? "",
-
-      description:
-        store.product.description ?? "",
-
-      brandId:
-        store.product.brandId ?? "",
-
-      categoryId:
-        store.product.categoryId ?? "",
-
-      isActive:
-        store.product.isActive ?? true,
-
-      isFeatured:
-        store.product.isFeatured ?? false,
-
-      searchKeywords:
-        store.product.searchKeywords ?? "",
-
-      oemNumbers: store.oemNumbers.map(
-        (i) => ({
-          id: i.id,
-          oemNumber:
-            i.oemNumber ?? "",
-        })
-      ),
-
-      specifications:
-        store.specifications.map((s) => ({
-          id: s.id,
-          name: s.name ?? "",
-          value: s.value ?? "",
-        })),
-
-      productFitments:
-        store.fitments.map((f) => ({
-          id: f.id,
-
-          level:
-            f.level ?? "TRIM",
-
-          makeId:
-            f.makeId ?? undefined,
-
-          modelId:
-            f.modelId ?? undefined,
-
-          generationId:
-            f.generationId ??
-            undefined,
-
-          engineId:
-            f.engineId ?? undefined,
-
-          trimId:
-            f.trimId ?? undefined,
-
-          yearStart:
-            safeNumber(
-              f.yearStart
-            ),
-
-          yearEnd:
-            safeNumber(
-              f.yearEnd
-            ),
-
-          notes:
-            f.notes ?? "",
-
-          position:
-            f.position ?? "",
-
-          quantityRequired:
-            safeNumber(
-              f.quantityRequired
-            ),
-
-          isUniversal:
-            f.isUniversal ?? false,
-        })),
-
-      medias: store.medias.map(
-        (m, index) => ({
-          id: m.id,
-
-          url: m.url ?? "",
-
-          type:
-            m.type ?? "IMAGE",
-
-          position:
-            safeNumber(
-              m.position,
-              index
-            ) ?? index,
-        })
-      ),
-
-      variants: store.variants.map(
-        (v) => ({
-          id: v.id,
-
-          name: v.name ?? "",
-
-          sku: v.sku ?? "",
-
-          price:
-            safeNumber(
-              v.price,
-              0
-            ) ?? 0,
-
-          costPrice:
-            safeNumber(
-              v.costPrice
-            ),
-
-          compareAtPrice:
-            safeNumber(
-              v.compareAtPrice
-            ),
-
-          weight:
-            safeNumber(
-              v.weight
-            ),
-
-          length:
-            safeNumber(
-              v.length
-            ),
-
-          width:
-            safeNumber(
-              v.width
-            ),
-
-          height:
-            safeNumber(
-              v.height
-            ),
-
-          barcode:
-            v.barcode ?? "",
-
-          isActive:
-            v.isActive ?? true,
-
-          attributes: (
-            v.attributes ?? []
-          ).map((a) => ({
-            id: a.id,
-            valueId:
-              a.valueId ?? "",
-          })),
-
-          inventories: (
-            v.inventories ?? []
-          ).map((inv) => ({
-            id: inv.id,
-
-            warehouseId:
-              inv.warehouseId ??
-              "",
-
-            stock:
-              safeNumber(
-                inv.stock,
-                0
-              ) ?? 0,
-
-            reserved:
-              safeNumber(
-                inv.reserved,
-                0
-              ) ?? 0,
-
-            threshold:
-              safeNumber(
-                inv.threshold
-              ),
-          })),
-        })
-      ),
-    }),
-    [store]
-  );
-
-  /* =========================================================
-     FORM
-  ========================================================= */
-
-  const form = useForm<FormValues>({
+  const form = useForm<CreateProductFormValues>({
+    resolver: zodResolver(createProductSchema),
+    defaultValues: emptyProduct,
     mode: "onChange",
-
-    resolver: zodResolver(
-      createProductSchema
-    ),
-
-    defaultValues,
   });
 
-  const {
-    control,
-    getValues,
-    reset,
-    setValue,
-  } = form;
-
-  /* =========================================================
-     FIELD ARRAYS
-  ========================================================= */
-
-  const variants = useFieldArray({
-    control,
-    name: "variants",
-  });
-
-  const specifications =
-    useFieldArray({
-      control,
-      name: "specifications",
-    });
-
-  const medias = useFieldArray({
-    control,
-    name: "medias",
-  });
-
-  const oemNumbers =
-    useFieldArray({
-      control,
-      name: "oemNumbers",
-    });
-
-  const fitments = useFieldArray({
-    control,
-    name: "productFitments",
-  });
-
-  /* =========================================================
-     WATCH
-  ========================================================= */
-
-  const watchedValues = useWatch({
-    control,
-  });
-
-  /* =========================================================
-     STORE SYNC
-  ========================================================= */
-
-  const lastSyncRef =
-    useRef<string>("");
-
-  useEffect(() => {
-    if (!watchedValues) return;
-
-    const payload = {
-      id: watchedValues.id,
-
-      slug:
-        watchedValues.slug ?? "",
-
-      name:
-        watchedValues.name ?? "",
-
-      description:
-        watchedValues.description ??
-        "",
-
-      brandId:
-        watchedValues.brandId ?? "",
-
-      categoryId:
-        watchedValues.categoryId ??
-        "",
-
-      isActive:
-        watchedValues.isActive ??
-        true,
-
-      isFeatured:
-        watchedValues.isFeatured ??
-        false,
-
-      searchKeywords:
-        watchedValues.searchKeywords ??
-        "",
-
-      variants:
-        watchedValues.variants ?? [],
-
-      specifications:
-        watchedValues.specifications ??
-        [],
-
-      productFitments:
-        watchedValues.productFitments ??
-        [],
-
-      medias:
-        watchedValues.medias ?? [],
-
-      oemNumbers:
-        watchedValues.oemNumbers ??
-        [],
-    };
-
-    const serialized =
-      JSON.stringify(payload);
-
-    if (
-      serialized ===
-      lastSyncRef.current
-    ) {
-      return;
-    }
-
-    lastSyncRef.current =
-      serialized;
-
-    /* =====================================================
-       PRODUCT
-    ===================================================== */
-
-    store.setProduct(
-      "id",
-      payload.id
-    );
-
-    store.setProduct(
-      "slug",
-      payload.slug
-    );
-
-    store.setProduct(
-      "name",
-      payload.name
-    );
-
-    store.setProduct(
-      "description",
-      payload.description
-    );
-
-    store.setProduct(
-      "brandId",
-      payload.brandId
-    );
-
-    store.setProduct(
-      "categoryId",
-      payload.categoryId
-    );
-
-    store.setProduct(
-      "isActive",
-      payload.isActive
-    );
-
-    store.setProduct(
-      "isFeatured",
-      payload.isFeatured
-    );
-
-    store.setProduct(
-      "searchKeywords",
-      payload.searchKeywords
-    );
-
-    /* =====================================================
-       BATCH UPDATE
-    ===================================================== */
-
-    useProductBuilder.setState({
-      variants:
-        payload.variants as any,
-
-      specifications:
-        payload.specifications as any,
-
-      fitments:
-        payload.productFitments as any,
-
-      medias:
-        payload.medias as any,
-
-      oemNumbers:
-        payload.oemNumbers as any,
-    });
-  }, [watchedValues, store]);
-
-  /* =========================================================
-     MANUAL SAVE ONLY
-  ========================================================= */
-
-  const handleSave = async () => {
-    const rawValues = getValues();
-
-    const parsed =
-      createProductSchema.safeParse(
-        rawValues
-      );
-
-    if (!parsed.success) {
-      console.log(
-        parsed.error.flatten()
-      );
-
-      return;
-    }
-
-    const data: ParsedValues =
-      parsed.data;
-
-    const payload: CreateProductInput =
-      {
-        id: data.id,
-
-        slug:
-          safeString(data.slug),
-
-        name: data.name,
-
-        description:
-          safeString(
-            data.description
-          ),
-
-        brandId: data.brandId,
-
-        categoryId:
-          data.categoryId,
-
-        isActive:
-          data.isActive,
-
-        isFeatured:
-          data.isFeatured,
-
-        searchKeywords:
-          safeString(
-            data.searchKeywords
-          ),
-
-        oemNumbers: (
-          data.oemNumbers ?? []
-        ).map((oem) => ({
-          id: oem.id,
-
-          oemNumber:
-            oem.oemNumber,
-        })),
-
-        specifications: (
-          data.specifications ??
-          []
-        ).map((spec) => ({
-          id: spec.id,
-
-          name: spec.name,
-
-          value: spec.value,
-        })),
-
-        productFitments: (
-          data.productFitments ??
-          []
-        ).map((fitment) => ({
-          id: fitment.id,
-
-          level:
-            fitment.level,
-
-          makeId:
-            fitment.makeId,
-
-          modelId:
-            fitment.modelId,
-
-          generationId:
-            fitment.generationId,
-
-          engineId:
-            fitment.engineId,
-
-          trimId:
-            fitment.trimId,
-
-          yearStart:
-            safeNumber(
-              fitment.yearStart
-            ),
-
-          yearEnd:
-            safeNumber(
-              fitment.yearEnd
-            ),
-
-          notes:
-            safeString(
-              fitment.notes
-            ),
-
-          position:
-            safeString(
-              fitment.position
-            ),
-
-          quantityRequired:
-            safeNumber(
-              fitment.quantityRequired
-            ),
-
-          isUniversal:
-            fitment.isUniversal ??
-            false,
-        })),
-
-        medias: (
-          data.medias ?? []
-        ).map(
-          (media, index) => ({
-            id: media.id,
-
-            url: media.url,
-
-            type: media.type,
-
-            position:
-              safeNumber(
-                media.position,
-                index
-              ) ?? index,
-          })
-        ),
-
-        variants: (
-          data.variants ?? []
-        ).map((variant) => ({
-          id: variant.id,
-
-          name:
-            variant.name,
-
-          sku:
-            variant.sku,
-
-          price:
-            safeNumber(
-              variant.price,
-              0
-            ) ?? 0,
-
-          costPrice:
-            safeNumber(
-              variant.costPrice
-            ),
-
-          compareAtPrice:
-            safeNumber(
-              variant.compareAtPrice
-            ),
-
-          weight:
-            safeNumber(
-              variant.weight
-            ),
-
-          length:
-            safeNumber(
-              variant.length
-            ),
-
-          width:
-            safeNumber(
-              variant.width
-            ),
-
-          height:
-            safeNumber(
-              variant.height
-            ),
-
-          barcode:
-            safeString(
-              variant.barcode
-            ),
-
-          isActive:
-            variant.isActive ??
-            true,
-
-          attributes: (
-            variant.attributes ??
-            []
-          ).map((attr) => ({
-            id: attr.id,
-
-            valueId:
-              attr.valueId,
-          })),
-
-          inventories: (
-            variant.inventories ??
-            []
-          ).map((inv) => ({
-            id: inv.id,
-
-            warehouseId:
-              inv.warehouseId,
-
-            stock:
-              safeNumber(
-                inv.stock,
-                0
-              ) ?? 0,
-
-            reserved:
-              safeNumber(
-                inv.reserved,
-                0
-              ) ?? 0,
-
-            threshold:
-              safeNumber(
-                inv.threshold
-              ),
-          })),
-        })),
-      };
-
-    if (
-      !payload.name ||
-      !payload.brandId ||
-      !payload.categoryId
-    ) {
-      return;
-    }
-
-    console.log(
-      "PRODUCT PAYLOAD:",
-      payload
-    );
-
-    await createProduct(
-      payload
-    ).unwrap();
+  const resetFormWithProduct = (product: any) => {
+    const mapped = mapApiProductToForm(product);
+    console.log("Final form reset data:", mapped);
+    form.reset(mapped);
   };
 
-  /* =========================================================
-     RESET
-  ========================================================= */
-
-  const handleReset = () => {
-    reset(defaultValues);
-
-    store.reset();
-
-    lastSyncRef.current = "";
+  const save = async (productId?: string): Promise<any> => {
+    const values = form.getValues();
+    const sanitized = sanitizeProductForApi(values);
+    if (!productId) {
+      const result = await createProduct(sanitized).unwrap();
+      return result;
+    } else {
+      const result = await updateProduct({ id: productId, data: sanitized }).unwrap();
+      return result;
+    }
   };
-
-  /* =========================================================
-     RETURN
-  ========================================================= */
 
   return {
     form,
-
-    variants,
-    specifications,
-    medias,
-    oemNumbers,
-    fitments,
-
-    save: handleSave,
-
-    reset: handleReset,
-
-    getValues,
-    setValue,
-
-    store,
+    resetFormWithProduct,
+    save,
+    ...form,
   };
 }

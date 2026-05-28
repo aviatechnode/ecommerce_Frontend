@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   useCreateMakeMutation,
   useCreateModelMutation,
@@ -9,6 +9,16 @@ import {
   useBulkAssignProductFitmentMutation,
   useGetProductsByFitmentQuery,
   useGetVehicleTreeQuery,
+  useDeleteMakeMutation,
+  useDeleteModelMutation,
+  useDeleteGenerationMutation,
+  useDeleteEngineMutation,
+  useDeleteTrimMutation,
+  useUpdateMakeMutation,
+  useUpdateModelMutation,
+  useUpdateGenerationMutation,
+  useUpdateEngineMutation,
+  useUpdateTrimMutation,
 } from "../../services/fitmentApi";
 
 import type {
@@ -55,7 +65,7 @@ const AdminFitments = () => {
     refetch: refetchTree,
   } = useGetVehicleTreeQuery();
 
-  // --------------------- Mutations -------------------------
+  // --------------------- Mutations (Create) -----------------
   const [createMake, { isLoading: creatingMake }] = useCreateMakeMutation();
   const [createModel, { isLoading: creatingModel }] = useCreateModelMutation();
   const [createGeneration, { isLoading: creatingGeneration }] =
@@ -66,6 +76,20 @@ const AdminFitments = () => {
     useAssignProductFitmentMutation();
   const [bulkAssignFitment, { isLoading: assigningBulk }] =
     useBulkAssignProductFitmentMutation();
+
+  // --------------------- Mutations (Delete) -----------------
+  const [deleteMake] = useDeleteMakeMutation();
+  const [deleteModel] = useDeleteModelMutation();
+  const [deleteGeneration] = useDeleteGenerationMutation();
+  const [deleteEngine] = useDeleteEngineMutation();
+  const [deleteTrim] = useDeleteTrimMutation();
+
+  // --------------------- Mutations (Update) -----------------
+  const [updateMake] = useUpdateMakeMutation();
+  const [updateModel] = useUpdateModelMutation();
+  const [updateGeneration] = useUpdateGenerationMutation();
+  const [updateEngine] = useUpdateEngineMutation();
+  const [updateTrim] = useUpdateTrimMutation();
 
   // --------------------- UI State --------------------------
   const [activeModal, setActiveModal] = useState<
@@ -78,6 +102,13 @@ const AdminFitments = () => {
     | "assignBulk"
     | null
   >(null);
+
+  // State for editing (when user clicks ✏️)
+  const [editingItem, setEditingItem] = useState<{
+    type: "make" | "model" | "generation" | "engine" | "trim";
+    id: string;
+    data: any;
+  } | null>(null);
 
   // Form state for creation modals
   const [makeForm, setMakeForm] = useState({ name: "", slug: "", isActive: true });
@@ -154,67 +185,122 @@ const AdminFitments = () => {
     year: "",
   });
 
-  // Helper function to find ID from name/value in vehicle tree
+  // Populate edit forms when editingItem changes
+  useEffect(() => {
+    if (!editingItem) return;
+    const { type, data } = editingItem;
+    switch (type) {
+      case "make":
+        setMakeForm({ name: data.name, slug: data.slug || "", isActive: data.isActive });
+        break;
+      case "model":
+        setModelForm({
+          makeId: data.makeId,
+          name: data.name,
+          slug: data.slug || "",
+          isActive: data.isActive,
+        });
+        break;
+      case "generation":
+        setGenForm({
+          modelId: data.modelId,
+          name: data.name,
+          slug: data.slug || "",
+          chassisCode: data.chassisCode || "",
+          yearStart: data.yearStart,
+          yearEnd: data.yearEnd?.toString() || "",
+          isActive: data.isActive,
+        });
+        break;
+      case "engine":
+        setEngineForm({
+          generationId: data.generationId,
+          engineCode: data.engineCode,
+          engineName: data.engineName || "",
+          fuelType: data.fuelType || "",
+          aspiration: data.aspiration || "",
+          cylinders: data.cylinders?.toString() || "",
+          horsepower: data.horsepower?.toString() || "",
+          displacementCc: data.displacementCc?.toString() || "",
+          displacementLabel: data.displacementLabel || "",
+          drivetrain: data.drivetrain || "",
+          transmissionType: data.transmissionType || "",
+          isActive: data.isActive,
+        });
+        break;
+      case "trim":
+        setTrimForm({
+          engineId: data.engineId,
+          name: data.name,
+          bodyType: data.bodyType || "",
+          doors: data.doors?.toString() || "",
+          isActive: data.isActive,
+        });
+        break;
+    }
+  }, [editingItem]);
+
+  // Helper functions to find IDs from names (unchanged)
   const findMakeIdByName = (makeName: string): string | undefined => {
-    const make = vehicleTree?.find(m => 
+    const make = vehicleTree?.find(m =>
       m.name.toLowerCase().includes(makeName.toLowerCase())
     );
     return make?.id;
   };
 
   const findModelIdByName = (makeName: string, modelName: string): string | undefined => {
-    const make = vehicleTree?.find(m => 
+    const make = vehicleTree?.find(m =>
       m.name.toLowerCase().includes(makeName.toLowerCase())
     );
-    const model = make?.models?.find(m => 
+    const model = make?.models?.find(m =>
       m.name.toLowerCase().includes(modelName.toLowerCase())
     );
     return model?.id;
   };
 
   const findGenerationIdByName = (makeName: string, modelName: string, generationName: string): string | undefined => {
-    const make = vehicleTree?.find(m => 
+    const make = vehicleTree?.find(m =>
       m.name.toLowerCase().includes(makeName.toLowerCase())
     );
-    const model = make?.models?.find(m => 
+    const model = make?.models?.find(m =>
       m.name.toLowerCase().includes(modelName.toLowerCase())
     );
-    const generation = model?.generations?.find(g => 
+    const generation = model?.generations?.find(g =>
       g.name.toLowerCase().includes(generationName.toLowerCase())
     );
     return generation?.id;
   };
 
   const findEngineIdByCode = (makeName: string, modelName: string, generationName: string, engineCode: string): string | undefined => {
-    const make = vehicleTree?.find(m => 
+    const make = vehicleTree?.find(m =>
       m.name.toLowerCase().includes(makeName.toLowerCase())
     );
-    const model = make?.models?.find(m => 
+    const model = make?.models?.find(m =>
       m.name.toLowerCase().includes(modelName.toLowerCase())
     );
-    const generation = model?.generations?.find(g => 
+    const generation = model?.generations?.find(g =>
       g.name.toLowerCase().includes(generationName.toLowerCase())
     );
-    const engine = generation?.engines?.find(e => 
+    const engine = generation?.engines?.find(e =>
       e.engineCode.toLowerCase().includes(engineCode.toLowerCase())
     );
     return engine?.id;
   };
 
   const findTrimIdByName = (makeName: string, modelName: string, generationName: string, engineCode: string, trimName: string): string | undefined => {
-    const make = vehicleTree?.find(m => 
+    const make = vehicleTree?.find(m =>
       m.name.toLowerCase().includes(makeName.toLowerCase())
     );
-    const model = make?.models?.find(m => 
+    const model = make?.models?.find(m =>
       m.name.toLowerCase().includes(modelName.toLowerCase())
     );
-    const generation = model?.generations?.find(g => 
+    const generation = model?.generations?.find(g =>
       g.name.toLowerCase().includes(generationName.toLowerCase())
     );
-    const engine = generation?.engines?.find(e => 
+    const engine = generation?.engines?.find(e =>
       e.engineCode.toLowerCase().includes(engineCode.toLowerCase())
     );
-    const trim = engine?.trims?.find(t => 
+    const trim = engine?.trims?.find(t =>
       t.name.toLowerCase().includes(trimName.toLowerCase())
     );
     return trim?.id;
@@ -226,16 +312,16 @@ const AdminFitments = () => {
 
     if (searchTerms.makeName) {
       makeId = findMakeIdByName(searchTerms.makeName);
-      
+
       if (searchTerms.modelName && makeId) {
         modelId = findModelIdByName(searchTerms.makeName, searchTerms.modelName);
-        
+
         if (searchTerms.generationName && modelId) {
           generationId = findGenerationIdByName(searchTerms.makeName, searchTerms.modelName, searchTerms.generationName);
-          
+
           if (searchTerms.engineCode && generationId) {
             engineId = findEngineIdByCode(searchTerms.makeName, searchTerms.modelName, searchTerms.generationName, searchTerms.engineCode);
-            
+
             if (searchTerms.trimName && engineId) {
               trimId = findTrimIdByName(searchTerms.makeName, searchTerms.modelName, searchTerms.generationName, searchTerms.engineCode, searchTerms.trimName);
             }
@@ -279,7 +365,156 @@ const AdminFitments = () => {
 
   // --------------------- Handlers --------------------------
   const closeModal = () => setActiveModal(null);
+  const closeEditModal = () => setEditingItem(null);
 
+  // Delete handler with confirmation
+  const handleDelete = async (type: string, id: string, name: string) => {
+    if (!confirm(`Delete ${type} "${name}"? This will also delete all children items.`)) return;
+    try {
+      switch (type) {
+        case "make":
+          await deleteMake(id).unwrap();
+          break;
+        case "model":
+          await deleteModel(id).unwrap();
+          break;
+        case "generation":
+          await deleteGeneration(id).unwrap();
+          break;
+        case "engine":
+          await deleteEngine(id).unwrap();
+          break;
+        case "trim":
+          await deleteTrim(id).unwrap();
+          break;
+      }
+      refetchTree();
+    } catch (err) {
+      console.error(err);
+      alert(`Failed to delete ${type}`);
+    }
+  };
+
+  // Open edit modal with current data
+  const handleEdit = (type: string, id: string, data: any) => {
+    setEditingItem({ type: type as any, id, data });
+  };
+
+  // Update submission
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+    try {
+      switch (editingItem.type) {
+        case "make":
+          await updateMake({
+            id: editingItem.id,
+            data: {
+              name: makeForm.name,
+              slug: makeForm.slug || undefined,
+              isActive: makeForm.isActive,
+            },
+          }).unwrap();
+          break;
+        case "model":
+          await updateModel({
+            id: editingItem.id,
+            data: {
+              makeId: modelForm.makeId,
+              name: modelForm.name,
+              slug: modelForm.slug || undefined,
+              isActive: modelForm.isActive,
+            },
+          }).unwrap();
+          break;
+        case "generation":
+          await updateGeneration({
+            id: editingItem.id,
+            data: {
+              modelId: genForm.modelId,
+              name: genForm.name,
+              slug: genForm.slug || undefined,
+              chassisCode: genForm.chassisCode || undefined,
+              yearStart: genForm.yearStart,
+              yearEnd: genForm.yearEnd ? parseInt(genForm.yearEnd) : undefined,
+              isActive: genForm.isActive,
+            },
+          }).unwrap();
+          break;
+        case "engine":
+          await updateEngine({
+            id: editingItem.id,
+            data: {
+              generationId: engineForm.generationId,
+              engineCode: engineForm.engineCode,
+              engineName: engineForm.engineName || undefined,
+              fuelType: engineForm.fuelType || undefined,
+              aspiration: engineForm.aspiration || undefined,
+              cylinders: engineForm.cylinders ? parseInt(engineForm.cylinders) : undefined,
+              horsepower: engineForm.horsepower ? parseInt(engineForm.horsepower) : undefined,
+              displacementCc: engineForm.displacementCc ? parseInt(engineForm.displacementCc) : undefined,
+              displacementLabel: engineForm.displacementLabel || undefined,
+              drivetrain: engineForm.drivetrain || undefined,
+              transmissionType: engineForm.transmissionType || undefined,
+              isActive: engineForm.isActive,
+            },
+          }).unwrap();
+          break;
+        case "trim":
+          await updateTrim({
+            id: editingItem.id,
+            data: {
+              engineId: trimForm.engineId,
+              name: trimForm.name,
+              bodyType: trimForm.bodyType || undefined,
+              doors: trimForm.doors ? parseInt(trimForm.doors) : undefined,
+              isActive: trimForm.isActive,
+            },
+          }).unwrap();
+          break;
+      }
+      refetchTree();
+      closeEditModal();
+      // Reset forms to defaults (optional)
+      setMakeForm({ name: "", slug: "", isActive: true });
+      setModelForm({ makeId: "", name: "", slug: "", isActive: true });
+      setGenForm({
+        modelId: "",
+        name: "",
+        slug: "",
+        chassisCode: "",
+        yearStart: new Date().getFullYear(),
+        yearEnd: "",
+        isActive: true,
+      });
+      setEngineForm({
+        generationId: "",
+        engineCode: "",
+        engineName: "",
+        fuelType: "",
+        aspiration: "",
+        cylinders: "",
+        horsepower: "",
+        displacementCc: "",
+        displacementLabel: "",
+        drivetrain: "",
+        transmissionType: "",
+        isActive: true,
+      });
+      setTrimForm({
+        engineId: "",
+        name: "",
+        bodyType: "",
+        doors: "",
+        isActive: true,
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Update failed");
+    }
+  };
+
+  // Create handlers (unchanged)
   const handleCreateMake = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -457,37 +692,69 @@ const AdminFitments = () => {
     }
   };
 
-  // --------------------- Render Tree -------------------------
+  // --------------------- Render Tree (with edit/delete) -----------------
   const renderTree = (makes: VehicleMake[]) => (
     <div className="space-y-4">
       {makes.map((make) => (
         <div key={make.id} className="rounded-lg border border-gray-200 p-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-gray-800">{make.name}</h3>
-            <button
-              onClick={() => {
-                setModelForm({ ...modelForm, makeId: make.id });
-                setActiveModal("model");
-              }}
-              className="rounded bg-green-100 px-3 py-1 text-sm text-green-700 hover:bg-green-200"
-            >
-              + Model
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleEdit("make", make.id, make)}
+                className="rounded bg-yellow-100 px-2 py-1 text-xs text-yellow-700 hover:bg-yellow-200"
+                title="Edit Make"
+              >
+                ✏️
+              </button>
+              <button
+                onClick={() => handleDelete("make", make.id, make.name)}
+                className="rounded bg-red-100 px-2 py-1 text-xs text-red-700 hover:bg-red-200"
+                title="Delete Make"
+              >
+                🗑️
+              </button>
+              <button
+                onClick={() => {
+                  setModelForm({ ...modelForm, makeId: make.id });
+                  setActiveModal("model");
+                }}
+                className="rounded bg-green-100 px-3 py-1 text-sm text-green-700 hover:bg-green-200"
+              >
+                + Model
+              </button>
+            </div>
           </div>
           <div className="ml-4 mt-3 space-y-3">
             {make.models?.map((model) => (
               <div key={model.id} className="border-l-2 border-gray-200 pl-4">
                 <div className="flex items-center justify-between">
                   <h4 className="font-semibold text-gray-700">{model.name}</h4>
-                  <button
-                    onClick={() => {
-                      setGenForm({ ...genForm, modelId: model.id });
-                      setActiveModal("generation");
-                    }}
-                    className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700"
-                  >
-                    + Generation
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleEdit("model", model.id, model)}
+                      className="rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700"
+                      title="Edit Model"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={() => handleDelete("model", model.id, model.name)}
+                      className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700"
+                      title="Delete Model"
+                    >
+                      🗑️
+                    </button>
+                    <button
+                      onClick={() => {
+                        setGenForm({ ...genForm, modelId: model.id });
+                        setActiveModal("generation");
+                      }}
+                      className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700"
+                    >
+                      + Generation
+                    </button>
+                  </div>
                 </div>
                 <div className="ml-4 mt-2 space-y-2">
                   {model.generations?.map((gen) => (
@@ -498,15 +765,31 @@ const AdminFitments = () => {
                           {gen.yearEnd ? `-${gen.yearEnd}` : ""})
                           {gen.chassisCode && ` [${gen.chassisCode}]`}
                         </span>
-                        <button
-                          onClick={() => {
-                            setEngineForm({ ...engineForm, generationId: gen.id });
-                            setActiveModal("engine");
-                          }}
-                          className="rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-700"
-                        >
-                          + Engine
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEdit("generation", gen.id, gen)}
+                            className="rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700"
+                            title="Edit Generation"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleDelete("generation", gen.id, gen.name)}
+                            className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700"
+                            title="Delete Generation"
+                          >
+                            🗑️
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEngineForm({ ...engineForm, generationId: gen.id });
+                              setActiveModal("engine");
+                            }}
+                            className="rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-700"
+                          >
+                            + Engine
+                          </button>
+                        </div>
                       </div>
                       <div className="ml-4 mt-1 space-y-1">
                         {gen.engines?.map((eng) => (
@@ -516,20 +799,54 @@ const AdminFitments = () => {
                                 {eng.engineCode} {eng.engineName && `- ${eng.engineName}`}
                                 {eng.displacementLabel && ` (${eng.displacementLabel})`}
                               </span>
-                              <button
-                                onClick={() => {
-                                  setTrimForm({ ...trimForm, engineId: eng.id });
-                                  setActiveModal("trim");
-                                }}
-                                className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700"
-                              >
-                                + Trim
-                              </button>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleEdit("engine", eng.id, eng)}
+                                  className="rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700"
+                                  title="Edit Engine"
+                                >
+                                  ✏️
+                                </button>
+                                <button
+                                  onClick={() => handleDelete("engine", eng.id, eng.engineCode)}
+                                  className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700"
+                                  title="Delete Engine"
+                                >
+                                  🗑️
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setTrimForm({ ...trimForm, engineId: eng.id });
+                                    setActiveModal("trim");
+                                  }}
+                                  className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700"
+                                >
+                                  + Trim
+                                </button>
+                              </div>
                             </div>
                             <div className="ml-4">
                               {eng.trims?.map((trim) => (
-                                <div key={trim.id} className="text-gray-400">
-                                  {trim.name} {trim.bodyType && `(${trim.bodyType})`}
+                                <div key={trim.id} className="flex items-center justify-between text-gray-400">
+                                  <span>
+                                    {trim.name} {trim.bodyType && `(${trim.bodyType})`}
+                                  </span>
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => handleEdit("trim", trim.id, trim)}
+                                      className="rounded bg-yellow-100 px-1 py-0.5 text-xs text-yellow-700"
+                                      title="Edit Trim"
+                                    >
+                                      ✏️
+                                    </button>
+                                    <button
+                                      onClick={() => handleDelete("trim", trim.id, trim.name)}
+                                      className="rounded bg-red-100 px-1 py-0.5 text-xs text-red-700"
+                                      title="Delete Trim"
+                                    >
+                                      🗑️
+                                    </button>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -607,7 +924,7 @@ const AdminFitments = () => {
           )}
         </div>
 
-        {/* Search Products by Fitment - Now with actual values */}
+        {/* Search Products by Fitment */}
         <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-xl font-semibold">🔍 Find Products by Vehicle</h2>
           <div className="space-y-4">
@@ -721,8 +1038,7 @@ const AdminFitments = () => {
               />
             </div>
 
-            {/* Show selected vehicle summary */}
-            {(searchTerms.makeName || searchTerms.modelName || searchTerms.generationName || 
+            {(searchTerms.makeName || searchTerms.modelName || searchTerms.generationName ||
               searchTerms.engineCode || searchTerms.trimName) && (
               <div className="rounded-lg bg-blue-50 p-3 text-sm">
                 <p className="font-semibold text-blue-900">Selected Vehicle:</p>
@@ -780,7 +1096,7 @@ const AdminFitments = () => {
         </div>
       </div>
 
-      {/* ---------- MODALS (same as before) ---------- */}
+      {/* ---------- CREATE MODALS (unchanged) ---------- */}
       {/* Create Make */}
       {activeModal === "make" && (
         <Modal title="Create New Make" onClose={closeModal}>
@@ -991,7 +1307,8 @@ const AdminFitments = () => {
             </div>
             <div>
               <label className="block text-sm font-medium">Fuel Type</label>
-              <input                type="text"
+              <input
+                type="text"
                 value={engineForm.fuelType}
                 onChange={(e) => setEngineForm({ ...engineForm, fuelType: e.target.value })}
                 className="mt-1 w-full rounded border p-2"
@@ -1363,6 +1680,329 @@ const AdminFitments = () => {
               className="w-full rounded bg-indigo-600 py-2 text-white disabled:opacity-50"
             >
               {assigningBulk ? <Spinner /> : "Bulk Assign"}
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {/* ---------- EDIT MODAL (reuses same forms) ---------- */}
+      {editingItem && (
+        <Modal title={`Edit ${editingItem.type.charAt(0).toUpperCase() + editingItem.type.slice(1)}`} onClose={closeEditModal}>
+          <form onSubmit={handleUpdate} className="space-y-4 max-h-[70vh] overflow-y-auto">
+            {editingItem.type === "make" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium">Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={makeForm.name}
+                    onChange={(e) => setMakeForm({ ...makeForm, name: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Slug</label>
+                  <input
+                    type="text"
+                    value={makeForm.slug}
+                    onChange={(e) => setMakeForm({ ...makeForm, slug: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={makeForm.isActive}
+                    onChange={(e) => setMakeForm({ ...makeForm, isActive: e.target.checked })}
+                  />
+                  <label>Active</label>
+                </div>
+              </>
+            )}
+
+            {editingItem.type === "model" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium">Make ID *</label>
+                  <input
+                    type="text"
+                    required
+                    value={modelForm.makeId}
+                    onChange={(e) => setModelForm({ ...modelForm, makeId: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={modelForm.name}
+                    onChange={(e) => setModelForm({ ...modelForm, name: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Slug</label>
+                  <input
+                    type="text"
+                    value={modelForm.slug}
+                    onChange={(e) => setModelForm({ ...modelForm, slug: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={modelForm.isActive}
+                    onChange={(e) => setModelForm({ ...modelForm, isActive: e.target.checked })}
+                  />
+                  <label>Active</label>
+                </div>
+              </>
+            )}
+
+            {editingItem.type === "generation" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium">Model ID *</label>
+                  <input
+                    type="text"
+                    required
+                    value={genForm.modelId}
+                    onChange={(e) => setGenForm({ ...genForm, modelId: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={genForm.name}
+                    onChange={(e) => setGenForm({ ...genForm, name: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Slug</label>
+                  <input
+                    type="text"
+                    value={genForm.slug}
+                    onChange={(e) => setGenForm({ ...genForm, slug: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Chassis Code</label>
+                  <input
+                    type="text"
+                    value={genForm.chassisCode}
+                    onChange={(e) => setGenForm({ ...genForm, chassisCode: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Year Start *</label>
+                  <input
+                    type="number"
+                    required
+                    value={genForm.yearStart}
+                    onChange={(e) => setGenForm({ ...genForm, yearStart: parseInt(e.target.value) })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Year End</label>
+                  <input
+                    type="number"
+                    value={genForm.yearEnd}
+                    onChange={(e) => setGenForm({ ...genForm, yearEnd: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={genForm.isActive}
+                    onChange={(e) => setGenForm({ ...genForm, isActive: e.target.checked })}
+                  />
+                  <label>Active</label>
+                </div>
+              </>
+            )}
+
+            {editingItem.type === "engine" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium">Generation ID *</label>
+                  <input
+                    type="text"
+                    required
+                    value={engineForm.generationId}
+                    onChange={(e) => setEngineForm({ ...engineForm, generationId: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Engine Code *</label>
+                  <input
+                    type="text"
+                    required
+                    value={engineForm.engineCode}
+                    onChange={(e) => setEngineForm({ ...engineForm, engineCode: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Engine Name</label>
+                  <input
+                    type="text"
+                    value={engineForm.engineName}
+                    onChange={(e) => setEngineForm({ ...engineForm, engineName: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Fuel Type</label>
+                  <input
+                    type="text"
+                    value={engineForm.fuelType}
+                    onChange={(e) => setEngineForm({ ...engineForm, fuelType: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Aspiration</label>
+                  <input
+                    type="text"
+                    value={engineForm.aspiration}
+                    onChange={(e) => setEngineForm({ ...engineForm, aspiration: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Cylinders</label>
+                  <input
+                    type="number"
+                    value={engineForm.cylinders}
+                    onChange={(e) => setEngineForm({ ...engineForm, cylinders: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Horsepower</label>
+                  <input
+                    type="number"
+                    value={engineForm.horsepower}
+                    onChange={(e) => setEngineForm({ ...engineForm, horsepower: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Displacement (cc)</label>
+                  <input
+                    type="number"
+                    value={engineForm.displacementCc}
+                    onChange={(e) => setEngineForm({ ...engineForm, displacementCc: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Displacement Label</label>
+                  <input
+                    type="text"
+                    value={engineForm.displacementLabel}
+                    onChange={(e) => setEngineForm({ ...engineForm, displacementLabel: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Drivetrain</label>
+                  <input
+                    type="text"
+                    value={engineForm.drivetrain}
+                    onChange={(e) => setEngineForm({ ...engineForm, drivetrain: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Transmission Type</label>
+                  <input
+                    type="text"
+                    value={engineForm.transmissionType}
+                    onChange={(e) => setEngineForm({ ...engineForm, transmissionType: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={engineForm.isActive}
+                    onChange={(e) => setEngineForm({ ...engineForm, isActive: e.target.checked })}
+                  />
+                  <label>Active</label>
+                </div>
+              </>
+            )}
+
+            {editingItem.type === "trim" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium">Engine ID *</label>
+                  <input
+                    type="text"
+                    required
+                    value={trimForm.engineId}
+                    onChange={(e) => setTrimForm({ ...trimForm, engineId: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={trimForm.name}
+                    onChange={(e) => setTrimForm({ ...trimForm, name: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Body Type</label>
+                  <input
+                    type="text"
+                    value={trimForm.bodyType}
+                    onChange={(e) => setTrimForm({ ...trimForm, bodyType: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Doors</label>
+                  <input
+                    type="number"
+                    value={trimForm.doors}
+                    onChange={(e) => setTrimForm({ ...trimForm, doors: e.target.value })}
+                    className="mt-1 w-full rounded border p-2"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={trimForm.isActive}
+                    onChange={(e) => setTrimForm({ ...trimForm, isActive: e.target.checked })}
+                  />
+                  <label>Active</label>
+                </div>
+              </>
+            )}
+
+            <button
+              type="submit"
+              className="w-full rounded bg-blue-600 py-2 text-white hover:bg-blue-700"
+            >
+              Update {editingItem.type}
             </button>
           </form>
         </Modal>

@@ -17,30 +17,69 @@ export interface NavbarCategory {
 }
 
 /* =========================================================
-ICON MAP
+ORDER + CONFIG
 ========================================================= */
 
-const iconRegistry: Record<string, any> = {
-  engine: Cpu,
-  brake: Disc,
-  suspension: Wrench,
-  electrical: Zap,
-  filter: Filter,
-  transmission: Cog,
-  drivetrain: Cog,
-  body: Car,
-  lubricant: Droplets,
-  general: Car,
-};
+const categoryConfig = {
+  engine: {
+    title: "Engine & Performance",
+    icon: Cpu,
+    order: 1,
+  },
 
-/* =========================================================
-ICON RESOLVER
-========================================================= */
+  brake: {
+    title: "Brake System",
+    icon: Disc,
+    order: 2,
+  },
 
-const resolveIconByType = (type?: string) => {
-  const key = (type || "general").toLowerCase();
+  suspension: {
+    title: "Suspension & Steering",
+    icon: Wrench,
+    order: 3,
+  },
 
-  return iconRegistry[key] || Car;
+  electrical: {
+    title: "Electrical",
+    icon: Zap,
+    order: 4,
+  },
+
+  filter: {
+    title: "Filters",
+    icon: Filter,
+    order: 5,
+  },
+
+  transmission: {
+    title: "Transmission",
+    icon: Cog,
+    order: 6,
+  },
+
+  drivetrain: {
+    title: "Drivetrain",
+    icon: Cog,
+    order: 7,
+  },
+
+  body: {
+    title: "Body & Exterior",
+    icon: Car,
+    order: 8,
+  },
+
+  lubricant: {
+    title: "Lubricants",
+    icon: Droplets,
+    order: 9,
+  },
+
+  general: {
+    title: "General Parts",
+    icon: Car,
+    order: 99,
+  },
 };
 
 /* =========================================================
@@ -52,17 +91,9 @@ export const transformCategoriesToNavbar = (
 ): NavbarCategory[] => {
   if (!categories.length) return [];
 
-  /**
-   * Group categories by TYPE
-   * Example:
-   * engine -> [Oil Pump, Timing Belt]
-   * brake -> [Brake Pad, Rotor]
-   */
-
   const grouped: Record<string, Category[]> = {};
 
   for (const category of categories) {
-    // skip inactive categories if needed
     if (!category.isActive) continue;
 
     const type = (category.type || "general").toLowerCase();
@@ -74,30 +105,35 @@ export const transformCategoriesToNavbar = (
     grouped[type].push(category);
   }
 
-  return Object.entries(grouped).map(([type, cats]) => {
-    const Icon = resolveIconByType(type);
+  return Object.entries(grouped)
+    .sort(([a], [b]) => {
+      const orderA =
+        categoryConfig[a as keyof typeof categoryConfig]?.order || 999;
 
-    /**
-     * Remove duplicate names
-     * + sort alphabetically for clean navbar UI
-     */
+      const orderB =
+        categoryConfig[b as keyof typeof categoryConfig]?.order || 999;
 
-    const uniqueItems = Array.from(
-      new Set(
-        cats
-          .map((category) => category.name?.trim())
-          .filter(Boolean)
-      )
-    ).sort((a, b) => a.localeCompare(b));
+      return orderA - orderB;
+    })
+    .map(([type, cats]) => {
+      const config =
+        categoryConfig[type as keyof typeof categoryConfig] ||
+        categoryConfig.general;
 
-    return {
-      title:
-        type.charAt(0).toUpperCase() +
-        type.slice(1).toLowerCase(),
+      const Icon = config.icon;
 
-      icon: <Icon size={16} />,
+      const uniqueItems = Array.from(
+        new Set(
+          cats
+            .map((category) => category.name?.trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b));
 
-      items: uniqueItems,
-    };
-  });
+      return {
+        title: config.title,
+        icon: <Icon size={16} className="text-gray-600" />,
+        items: uniqueItems,
+      };
+    });
 };

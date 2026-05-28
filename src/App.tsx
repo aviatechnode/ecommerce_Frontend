@@ -31,12 +31,10 @@ import AdminCouriers from "./admin/components/AdminCouriers";
 // import AdminShippingZones from "./admin/components/AdminShippingZones";
 // import AdminPickupStations from "./admin/components/AdminPickupStations";
 
-import Home from "./components/Home";
+import Home from "./client/pages/Home";
 import ClientLayout from "./client/layouts/ClientLayout";
 
 import { useAuthStore } from "./store/AuthStore";
-
-import ProductBuilder from "./admin/components/ProductBuilder";
 
 import Cart from "./client/pages/Cart";
 import ProductDetails from "./client/pages/ProductDetails";
@@ -46,6 +44,10 @@ import CheckoutPage from "./client/pages/Checkout";
 import Feedback from "./client/components/Feedback";
 import AdminShippingZones from "./admin/components/AdminShippingZones";
 import AdminPickupStations from "./admin/components/AdminPickupStations";
+import AdminShipments from "./admin/components/AdminShipments";
+import AboutPage from "./client/pages/About-us";
+import AdminProducts from "./admin/components/AdminProducts";
+import CustomerProfilePage from "./client/pages/Profile";
 
 function App() {
   const initAuth = useAuthStore((s) => s.initAuth);
@@ -68,6 +70,9 @@ function App() {
         <Route path="wishlist" element={<WishlistPage />} />
         <Route path="checkout" element={<CheckoutPage />} />
         <Route path="feedback" element={<Feedback />} />
+        <Route path="about" element={<AboutPage />} />
+        <Route path="profile" element={<CustomerProfilePage />} />
+
       </Route>
 
       {/* ================= AUTH ================= */}
@@ -88,7 +93,7 @@ function App() {
         <Route index element={<AdminDashboard />} />
 
         {/* ================= CATALOG ================= */}
-        <Route path="products" element={<ProductBuilder />} />
+        <Route path="products" element={<AdminProducts />} />
         <Route path="categories" element={<AdminCategories />} />
         <Route path="brands" element={<AdminBrands />} />
         <Route path="fitments" element={<AdminFitments />} />
@@ -112,10 +117,10 @@ function App() {
         {/* ================= LOGISTICS ================= */}
 
         {/* Shipments */}
-        {/* <Route
+        <Route
           path="logistics/shipments"
           element={<AdminShipments />}
-        /> */}
+        />
 
         {/* Tracking */}
         {/* <Route

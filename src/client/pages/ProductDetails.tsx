@@ -6,7 +6,6 @@ import {
   X, Info,
 } from "lucide-react";
 
-// Import RTK Query hooks
 import { useGetProductQuery, type Product } from "../../services/productApi";
 import { useAddToCartMutation } from "../../services/cartApi";
 import {
@@ -17,33 +16,23 @@ import {
   useDeleteReviewMutation,
 } from "../../services/reviewApi";
 
-// Import wishlist hooks
 import {
   useGetWishlistQuery,
   useToggleWishlistMutation,
   useRemoveWishlistItemMutation,
 } from "../../services/wishlistApi";
 
-import type { ProductVariant } from "../../schemas/product.schema";
+import type { ProductVariant, Media } from "../../schemas/product.schema";
 
 interface ExtendedProduct extends Product {
   brand?: { id: string; name: string } | null;
   category?: { id: string; name: string } | null;
 }
 
-interface Media {
-  id?: string;
-  url: string;
-  type: "IMAGE" | "VIDEO";
-  position: number;
-}
-
-// Helper: Calculate available stock from inventories
 const getAvailableStock = (inventories: Array<{ stock: number; reserved: number }> = []) => {
   return inventories.reduce((sum, inv) => sum + (inv.stock - (inv.reserved || 0)), 0);
 };
 
-// Toast notification component
 const Toast = ({ message, type, onClose }: { message: string; type: "success" | "error"; onClose: () => void }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 3000);
@@ -62,7 +51,7 @@ const Toast = ({ message, type, onClose }: { message: string; type: "success" | 
 };
 
 // ==============================
-// 2. CUSTOM HOOKS
+// CUSTOM HOOKS
 // ==============================
 
 function useProductData(productId: string | undefined) {
@@ -71,25 +60,19 @@ function useProductData(productId: string | undefined) {
     isLoading: loading, 
     error: productError,
     refetch: refetchProduct
-  } = useGetProductQuery(productId || "", {
-    skip: !productId,
-  });
+  } = useGetProductQuery(productId || "", { skip: !productId });
 
   const { 
     data: reviews = [], 
     isLoading: reviewsLoading, 
     error: reviewsError,
     refetch: refetchReviews
-  } = useGetReviewsQuery(productId || "", {
-    skip: !productId,
-  });
+  } = useGetReviewsQuery(productId || "", { skip: !productId });
 
   const {
     data: ratingSummary,
     refetch: refetchSummary
-  } = useGetRatingSummaryQuery(productId || "", {
-    skip: !productId,
-  });
+  } = useGetRatingSummaryQuery(productId || "", { skip: !productId });
 
   useEffect(() => {
     if (productId) {
@@ -102,11 +85,7 @@ function useProductData(productId: string | undefined) {
   const averageRating = ratingSummary?.averageRating || 0;
   const totalReviews = ratingSummary?.totalReviews || 0;
 
-  const extendedProduct: ExtendedProduct | null = product ? {
-    ...product,
-    brand: undefined,
-    category: undefined,
-  } : null;
+  const extendedProduct: ExtendedProduct | null = product ? { ...product } as ExtendedProduct : null;
 
   return { 
     product: extendedProduct, 
@@ -141,18 +120,17 @@ function useVariantManager(product: ExtendedProduct | null) {
   }, [selectedVariant]);
 
   useEffect(() => {
-    if (product && product.variants?.length && !selectedVariantId) {
-      setSelectedVariantId(product.variants[0].id!);
+    if (product?.variants?.length && !selectedVariantId) {
+      const firstVariantId = product.variants[0].id;
+      if (firstVariantId) setSelectedVariantId(firstVariantId);
     }
   }, [product, selectedVariantId]);
 
   return { selectedVariantId, setSelectedVariantId, selectedVariant, stockStatus };
 }
 
-// Updated: removed manual refetch – RTK Query optimistic update handles it
 function useCartActions(selectedVariantId: string | null, stockStatus: { available: boolean; totalStock: number }) {
   const [addToCart, { isLoading: adding }] = useAddToCartMutation();
-  
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -166,13 +144,8 @@ function useCartActions(selectedVariantId: string | null, stockStatus: { availab
 
   const handleAddToCart = async () => {
     if (!selectedVariantId || adding || !stockStatus.available) return;
-    
     try {
-      await addToCart({ 
-        variantId: selectedVariantId, 
-        quantity,
-      }).unwrap();
-      // No manual refetch – cartApi's optimistic update + invalidatesTags will update the cache
+      await addToCart({ variantId: selectedVariantId, quantity }).unwrap();
       setAdded(true);
       setToast({ message: "Added to cart!", type: "success" });
       setTimeout(() => setAdded(false), 2000);
@@ -247,7 +220,7 @@ function useReviewActions(productId: string | undefined) {
 }
 
 // ==============================
-// 3. HELPER COMPONENTS
+// HELPER COMPONENTS
 // ==============================
 
 const StarRatingInput = ({ rating, onChange, size = 28 }: {
@@ -354,6 +327,7 @@ const ProductImageGallery = ({ medias, mainImage, setMainImage }: {
   setMainImage: (url: string) => void;
 }) => {
   const imageMedias = medias?.filter(m => m.type === "IMAGE") || [];
+
   return (
     <div className="space-y-4">
       <div className="aspect-square bg-gray-100 rounded-2xl overflow-hidden shadow-md">
@@ -367,7 +341,8 @@ const ProductImageGallery = ({ medias, mainImage, setMainImage }: {
         <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
           {imageMedias.map((media, idx) => (
             <button
-              key={idx}
+              key={media.id || `${media.url}-${idx}`}
+              onMouseEnter={() => setMainImage(media.url)}
               onClick={() => setMainImage(media.url)}
               className={`shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${
                 mainImage === media.url ? "border-green-500 shadow-md" : "border-gray-200 hover:border-gray-300"
@@ -393,12 +368,13 @@ const VariantSelector = ({ variants, selectedId, onChange }: {
       {variants.map((variant) => (
         <button
           key={variant.id}
-          onClick={() => onChange(variant.id!)}
+          onClick={() => variant.id && onChange(variant.id)}
           className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
             selectedId === variant.id
               ? "border-green-600 bg-green-50 text-green-700 shadow-sm"
               : "border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:shadow-sm"
           }`}
+          disabled={!variant.id}
         >
           {variant.name}
         </button>
@@ -407,7 +383,6 @@ const VariantSelector = ({ variants, selectedId, onChange }: {
   </div>
 );
 
-// Loading skeleton
 const ProductDetailsSkeleton = () => (
   <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
     <div className="h-8 w-24 bg-gray-200 rounded-lg animate-pulse mb-6" />
@@ -430,7 +405,7 @@ const ProductDetailsSkeleton = () => (
 );
 
 // ==============================
-// 4. MAIN COMPONENT
+// MAIN COMPONENT
 // ==============================
 export default function ProductDetails() {
   const { id: productId } = useParams<{ id: string }>();
@@ -441,7 +416,6 @@ export default function ProductDetails() {
   const { quantity, adding, added, toast, setToast, increaseQty, decreaseQty, handleAddToCart } = useCartActions(selectedVariantId, stockStatus);
   const reviewActions = useReviewActions(productId);
 
-  // Wishlist hooks
   const { data: wishlist, refetch: refetchWishlist } = useGetWishlistQuery();
   const [toggleWishlist, { isLoading: toggleWishlistLoading }] = useToggleWishlistMutation();
   const [removeFromWishlist, { isLoading: removeFromWishlistLoading }] = useRemoveWishlistItemMutation();
@@ -450,8 +424,8 @@ export default function ProductDetails() {
   const [activeTab, setActiveTab] = useState<"specs" | "fitment" | "reviews">("specs");
   const [showStickyBar, setShowStickyBar] = useState(false);
   const observerRef = useRef<HTMLDivElement>(null);
+  const reviewSectionRef = useRef<HTMLDivElement>(null);
 
-  // Check if product is in wishlist
   const isInWishlist = useMemo(() => {
     if (!wishlist?.items || !product?.id) return false;
     return wishlist.items.some(item => item.productId === product.id);
@@ -460,11 +434,11 @@ export default function ProductDetails() {
   const wishlistLoading = toggleWishlistLoading || removeFromWishlistLoading;
 
   useEffect(() => {
-    if (product) {
+    if (product && !mainImage) {
       const firstImage = product.medias?.find((m) => m.type === "IMAGE")?.url || null;
       setMainImage(firstImage);
     }
-  }, [product]);
+  }, [product, mainImage]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -475,19 +449,26 @@ export default function ProductDetails() {
     return () => observer.disconnect();
   }, []);
 
+  const handleWriteReviewClick = () => {
+    setActiveTab("reviews");
+    reviewActions.setShowCreateForm(true);
+    reviewActions.setEditingReviewId(null);
+    setTimeout(() => {
+      reviewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  };
+
   const handleWishlistToggle = async () => {
     if (!product?.id) return;
-
     try {
       if (isInWishlist) {
         const wishlistItem = wishlist?.items.find(item => item.productId === product.id);
         if (wishlistItem?.id) {
           await removeFromWishlist({ wishlistItemId: wishlistItem.id }).unwrap();
-          setToast({ message: "Removed from wishlist", type: "success" });
         } else {
           await removeFromWishlist({ productId: product.id }).unwrap();
-          setToast({ message: "Removed from wishlist", type: "success" });
         }
+        setToast({ message: "Removed from wishlist", type: "success" });
       } else {
         await toggleWishlist({ productId: product.id }).unwrap();
         setToast({ message: "Added to wishlist", type: "success" });
@@ -512,11 +493,24 @@ export default function ProductDetails() {
 
   if (loading) return <ProductDetailsSkeleton />;
 
+  // ✅ FIX: Safely extract error message
+  const getErrorMessage = (err: unknown): string => {
+    if (typeof err === "string") return err;
+    if (err && typeof err === "object") {
+      const anyErr = err as any;
+      if (anyErr.message) return anyErr.message;
+      if (anyErr.data?.message) return anyErr.data.message;
+      if (anyErr.status && anyErr.data) return `Error ${anyErr.status}: ${JSON.stringify(anyErr.data)}`;
+    }
+    return "Product not found";
+  };
+
   if (error || !product) {
+    const errorMsg = getErrorMessage(error);
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-4">
         <AlertCircle size={48} className="text-red-500" />
-        <p className="text-gray-600 text-center">{(error as any)?.message || error || "Product not found"}</p>
+        <p className="text-gray-600 text-center">{errorMsg}</p>
         <button onClick={() => navigate("/")} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
           Back to Shop
         </button>
@@ -543,11 +537,15 @@ export default function ProductDetails() {
             <div ref={observerRef} className="relative -top-20" />
 
             <div className="flex flex-wrap gap-2">
-              {product.brandId && (
-                <span className="text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">Brand ID: {product.brandId.slice(0, 8)}</span>
+              {product.brand?.name && (
+                <span className="text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">
+                  Brand: {product.brand.name}
+                </span>
               )}
-              {product.categoryId && (
-                <span className="text-xs text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">Category ID: {product.categoryId.slice(0, 8)}</span>
+              {product.category?.name && (
+                <span className="text-xs text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
+                  Category: {product.category.name}
+                </span>
               )}
               {oemDisplay && (
                 <span className="text-xs text-gray-500 font-mono bg-gray-50 px-2.5 py-1 rounded-full flex items-center gap-1">
@@ -566,10 +564,7 @@ export default function ProductDetails() {
               </div>
               <span className="text-sm font-medium text-gray-700">{averageRating.toFixed(1)}</span>
               <span className="text-sm text-gray-500">({totalReviews} {totalReviews === 1 ? "review" : "reviews"})</span>
-              <button
-                onClick={() => { setActiveTab("reviews"); reviewActions.setShowCreateForm(true); reviewActions.setEditingReviewId(null); }}
-                className="ml-auto text-sm text-green-600 hover:text-green-700 font-medium transition"
-              >
+              <button onClick={handleWriteReviewClick} className="ml-auto text-sm text-green-600 hover:text-green-700 font-medium transition">
                 Write a review
               </button>
             </div>
@@ -630,7 +625,7 @@ export default function ProductDetails() {
                     size={20} 
                     className={`transition-all ${
                       isInWishlist 
-                        ? "fill-red-500 text-red-500 group-hover:scale-110" 
+                        ? "fill-orange-400 text-orange-400 group-hover:scale-110" 
                         : "text-gray-600 group-hover:text-red-500 group-hover:scale-110"
                     }`} 
                   />
@@ -639,7 +634,7 @@ export default function ProductDetails() {
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-2">
-              <div className="flex items-center gap-2 text-sm text-gray-600"><Truck size={18} className="text-green-600" /><span>Free shipping over ₦50,000</span></div>
+              <div className="flex items-center gap-2 text-sm text-gray-600"><Truck size={18} className="text-green-600" /><span>Fast delivery</span></div>
               <div className="flex items-center gap-2 text-sm text-gray-600"><RefreshCw size={18} className="text-green-600" /><span>30-day returns</span></div>
               <div className="flex items-center gap-2 text-sm text-gray-600"><ShieldCheck size={18} className="text-green-600" /><span>2-year warranty</span></div>
               <div className="flex items-center gap-2 text-sm text-gray-600"><Tag size={18} className="text-green-600" /><span>Secure payment</span></div>
@@ -666,7 +661,7 @@ export default function ProductDetails() {
             </nav>
           </div>
 
-          <div className="p-6">
+          <div className="p-6" ref={reviewSectionRef}>
             {activeTab === "specs" && product.specifications && product.specifications.length > 0 && (
               <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
                 {product.specifications.map((spec, idx) => (
@@ -711,7 +706,7 @@ export default function ProductDetails() {
                   <div className="text-center py-12 bg-gray-50 rounded-xl">
                     <Star size={48} className="mx-auto text-gray-300 mb-3" />
                     <p className="text-gray-500">No reviews yet.</p>
-                    <button onClick={() => reviewActions.setShowCreateForm(true)} className="mt-3 text-green-600 hover:text-green-700 font-medium transition">
+                    <button onClick={handleWriteReviewClick} className="mt-3 text-green-600 hover:text-green-700 font-medium transition">
                       Be the first to review this product
                     </button>
                   </div>
@@ -772,7 +767,7 @@ export default function ProductDetails() {
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-4 flex items-center justify-between gap-3 animate-slide-up z-40 md:hidden">
           <div>
             <p className="text-sm font-medium text-gray-900">{product.name}</p>
-            <p className="text-lg font-bold text-green-600">₦{selectedVariant?.price.toLocaleString()}</p>
+            <p className="text-lg font-bold text-green-600">₦{selectedVariant?.price?.toLocaleString()}</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center border border-gray-300 rounded-lg">

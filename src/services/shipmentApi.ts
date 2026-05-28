@@ -1,153 +1,194 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
+
 import { axiosBaseQuery } from "../api/axiosBaseQuery";
 
-//////////////////////////////////////////////////////////
-// TYPES
-//////////////////////////////////////////////////////////
+import type {
+  CreateShipmentInput,
+  DeleteShipmentResponse,
+  GetShipmentsResponse,
+  ShipmentResponse,
+  ShipmentStatus,
+  UpdateShipmentInput,
+  UpdateShipmentStatusInput,
+} from "../types/shipment.types";
 
-export interface ShippingItem {
-  variantId: string;
-  quantity: number;
+
+/* =========================================================
+QUERY PARAMS
+========================================================= */
+
+export interface GetShipmentsQuery {
+  page?: number;
+
+  limit?: number;
+
+  status?: ShipmentStatus;
+
+  courierId?: string;
+
+  search?: string;
 }
 
-export interface CalculateShippingOptionsPayload {
-  items: ShippingItem[];
-  destinationStateId: string;
-  destinationLgaId: string;
-}
+/* =========================================================
+API
+========================================================= */
 
-export interface CreateShipmentPayload {
-  orderId: string;
-  selectedCourierId: string;
-  selectedWarehouseId: string;
-  calculatedFee: number;
-}
+export const shipmentApi = createApi({
+  reducerPath: "shipmentApi",
 
-export interface UpdateShipmentPayload {
-  id: string;
-  status: string;
-  trackingNo?: string;
-  estimatedDeliveryDays?: number;
-}
-
-export interface CreateShippingRatePayload {
-  [key: string]: any;
-}
-
-//////////////////////////////////////////////////////////
-// API
-//////////////////////////////////////////////////////////
-
-export const shippingApi = createApi({
-  reducerPath: "shippingApi",
   baseQuery: axiosBaseQuery(),
-  tagTypes: ["Shipping", "Rates", "Warehouses", "Couriers"],
+
+  tagTypes: ["Shipment"],
 
   endpoints: (builder) => ({
-    /**
-     * POST /shipping/calculate
-     */
-    calculateShippingOptions: builder.mutation({
-      query: (body: CalculateShippingOptionsPayload) => ({
-        url: "/shipping/calculate",
+    /* =========================================================
+    CREATE SHIPMENT
+    ========================================================= */
+    createShipment: builder.mutation<
+      ShipmentResponse,
+      CreateShipmentInput
+    >({
+      query: (data) => ({
+        url: "/shipments",
+
         method: "POST",
-        data: body,
+
+        data,
       }),
+
+      invalidatesTags: ["Shipment"],
     }),
 
-    /**
-     * POST /shipping/shipments
-     */
-    createShipment: builder.mutation({
-      query: (body: CreateShipmentPayload) => ({
-        url: "/shipping/shipments",
-        method: "POST",
-        data: body,
+    /* =========================================================
+    GET ALL SHIPMENTS
+    ========================================================= */
+    getShipments: builder.query<
+      GetShipmentsResponse,
+      GetShipmentsQuery | void
+    >({
+      query: (params) => ({
+        url: "/shipments",
+
+        method: "GET",
+
+        params,
       }),
-      invalidatesTags: ["Shipping"],
+
+      providesTags: ["Shipment"],
     }),
 
-    /**
-     * PATCH /shipping/shipments/:id
-     */
-    updateShipment: builder.mutation({
-      query: ({ id, ...body }: UpdateShipmentPayload) => ({
-        url: `/shipping/shipments/${id}`,
+    /* =========================================================
+    GET SHIPMENT BY ID
+    ========================================================= */
+    getShipmentById: builder.query<
+      ShipmentResponse,
+      string
+    >({
+      query: (id) => ({
+        url: `/shipments/${id}`,
+
+        method: "GET",
+      }),
+
+      providesTags: (_result, _error, id) => [
+        { type: "Shipment", id },
+      ],
+    }),
+
+    /* =========================================================
+    UPDATE SHIPMENT
+    ========================================================= */
+    updateShipment: builder.mutation<
+      ShipmentResponse,
+      {
+        id: string;
+
+        data: UpdateShipmentInput;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `/shipments/${id}`,
+
         method: "PATCH",
-        data: body,
+
+        data,
       }),
-      invalidatesTags: ["Shipping"],
+
+      invalidatesTags: (_result, _error, arg) => [
+        { type: "Shipment", id: arg.id },
+        "Shipment",
+      ],
     }),
 
-    /**
-     * GET /shipping/track/:orderId
-     */
-    trackShipment: builder.query({
-      query: (orderId: string) => ({
-        url: `/shipping/track/${orderId}`,
+    /* =========================================================
+    UPDATE SHIPMENT STATUS
+    ========================================================= */
+    updateShipmentStatus: builder.mutation<
+      ShipmentResponse,
+      {
+        id: string;
+
+        data: UpdateShipmentStatusInput;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `/shipments/${id}/status`,
+
+        method: "PATCH",
+
+        data,
+      }),
+
+      invalidatesTags: (_result, _error, arg) => [
+        { type: "Shipment", id: arg.id },
+        "Shipment",
+      ],
+    }),
+
+    /* =========================================================
+    DELETE SHIPMENT
+    ========================================================= */
+    deleteShipment: builder.mutation<
+      DeleteShipmentResponse,
+      string
+    >({
+      query: (id) => ({
+        url: `/shipments/${id}`,
+
+        method: "DELETE",
+      }),
+
+      invalidatesTags: ["Shipment"],
+    }),
+
+    /* =========================================================
+    TRACK SHIPMENT
+    ========================================================= */
+    trackShipment: builder.query<
+      ShipmentResponse,
+      string
+    >({
+      query: (trackingNumber) => ({
+        url: `/shipments/track/${trackingNumber}`,
+
         method: "GET",
       }),
-      providesTags: ["Shipping"],
-    }),
 
-    /**
-     * GET /shipping/rates
-     */
-    getShippingRates: builder.query({
-      query: () => ({
-        url: "/shipping/rates",
-        method: "GET",
-      }),
-      providesTags: ["Rates"],
-    }),
-
-    /**
-     * POST /shipping/rates
-     */
-    createShippingRate: builder.mutation({
-      query: (body: CreateShippingRatePayload) => ({
-        url: "/shipping/rates",
-        method: "POST",
-        data: body,
-      }),
-      invalidatesTags: ["Rates"],
-    }),
-
-    /**
-     * GET /shipping/warehouses
-     */
-    getWarehouses: builder.query({
-      query: () => ({
-        url: "/shipping/warehouses",
-        method: "GET",
-      }),
-      providesTags: ["Warehouses"],
-    }),
-
-    /**
-     * GET /shipping/couriers
-     */
-    getCouriers: builder.query({
-      query: () => ({
-        url: "/shipping/couriers",
-        method: "GET",
-      }),
-      providesTags: ["Couriers"],
+      providesTags: ["Shipment"],
     }),
   }),
 });
 
-//////////////////////////////////////////////////////////
-// EXPORT HOOKS
-//////////////////////////////////////////////////////////
+/* =========================================================
+EXPORT HOOKS
+========================================================= */
 
 export const {
-  useCalculateShippingOptionsMutation,
   useCreateShipmentMutation,
+  useGetShipmentsQuery,
+  useGetShipmentByIdQuery,
   useUpdateShipmentMutation,
+  useUpdateShipmentStatusMutation,
+  useDeleteShipmentMutation,
   useTrackShipmentQuery,
-  useGetShippingRatesQuery,
-  useCreateShippingRateMutation,
-  useGetWarehousesQuery,
-  useGetCouriersQuery,
-} = shippingApi;
+} = shipmentApi;

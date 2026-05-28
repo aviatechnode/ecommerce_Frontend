@@ -1,7 +1,16 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
-import { axiosBaseQuery } from "../api/axiosBaseQuery";
-import type { FitmentLevel, ProductFitment, VehicleEngine, VehicleGeneration, VehicleMake, VehicleModel, VehicleTrim } from "../types/fitment.types";
 
+import { axiosBaseQuery } from "../api/axiosBaseQuery";
+
+import type {
+  FitmentLevel,
+  ProductFitment,
+  VehicleEngine,
+  VehicleGeneration,
+  VehicleMake,
+  VehicleModel,
+  VehicleTrim,
+} from "../types/fitment.types";
 
 export const fitmentApi = createApi({
   reducerPath: "fitmentApi",
@@ -20,17 +29,13 @@ export const fitmentApi = createApi({
       VehicleMake,
       {
         name: string;
-
         slug?: string;
-
         isActive?: boolean;
       }
     >({
       query: (data) => ({
         url: "/api/fitments/makes",
-
         method: "POST",
-
         data,
       }),
 
@@ -42,124 +47,83 @@ export const fitmentApi = createApi({
       VehicleModel,
       {
         makeId: string;
-
         name: string;
-
         slug?: string;
-
         isActive?: boolean;
       }
     >({
       query: (data) => ({
         url: "/api/fitments/models",
-
         method: "POST",
-
         data,
       }),
 
       invalidatesTags: ["VehicleTree"],
     }),
 
-    //////////////////////////////////////////////////////
     // VEHICLE GENERATIONS
-    //////////////////////////////////////////////////////
-
     createGeneration: builder.mutation<
       VehicleGeneration,
       {
         modelId: string;
-
         name: string;
-
         slug?: string;
-
         chassisCode?: string;
-
         yearStart: number;
-
         yearEnd?: number;
-
         isActive?: boolean;
       }
     >({
       query: (data) => ({
         url: "/api/fitments/generations",
-
         method: "POST",
-
         data,
       }),
 
       invalidatesTags: ["VehicleTree"],
     }),
 
-    //////////////////////////////////////////////////////
     // VEHICLE ENGINES
-    //////////////////////////////////////////////////////
-
     createEngine: builder.mutation<
       VehicleEngine,
       {
         generationId: string;
-
         engineCode: string;
-
         engineName?: string;
-
         fuelType?: string;
-
         aspiration?: string;
-
         cylinders?: number;
-
         horsepower?: number;
-
         displacementCc?: number;
-
         displacementLabel?: string;
-
         drivetrain?: string;
-
         transmissionType?: string;
-
         isActive?: boolean;
       }
     >({
       query: (data) => ({
         url: "/api/fitments/engines",
-
         method: "POST",
-
         data,
       }),
 
       invalidatesTags: ["VehicleTree"],
     }),
 
-    //////////////////////////////////////////////////////
     // VEHICLE TRIMS
-    //////////////////////////////////////////////////////
-
     createTrim: builder.mutation<
       VehicleTrim,
       {
         engineId: string;
-
         name: string;
-
         bodyType?: string;
-
         doors?: number;
-
         isActive?: boolean;
       }
     >({
       query: (data) => ({
         url: "/api/fitments/trims",
-
         method: "POST",
-
         data,
       }),
 
@@ -171,37 +135,23 @@ export const fitmentApi = createApi({
       ProductFitment,
       {
         productId: string;
-
         level: FitmentLevel;
-
         makeId?: string;
-
         modelId?: string;
-
         generationId?: string;
-
         engineId?: string;
-
         trimId?: string;
-
         yearStart?: number;
-
         yearEnd?: number;
-
         notes?: string;
-
         position?: string;
-
         quantityRequired?: number;
-
         isUniversal?: boolean;
       }
     >({
       query: (data) => ({
         url: "/api/fitments/products/assign",
-
         method: "POST",
-
         data,
       }),
 
@@ -214,26 +164,18 @@ export const fitmentApi = createApi({
     // BULK ASSIGN PRODUCT FITMENTS
     bulkAssignProductFitment:
       builder.mutation<
-        {
-          message: string;
-        },
+        { message: string },
         {
           productId: string;
-
           trimIds: string[];
-
           notes?: string;
-
           position?: string;
-
           quantityRequired?: number;
         }
       >({
         query: (data) => ({
           url: "/api/fitments/products/bulk-assign",
-
           method: "POST",
-
           data,
         }),
 
@@ -248,23 +190,16 @@ export const fitmentApi = createApi({
       any[],
       {
         makeId?: string;
-
         modelId?: string;
-
         generationId?: string;
-
         engineId?: string;
-
         trimId?: string;
-
         year?: number;
       }
     >({
       query: (params) => ({
         url: "/api/fitments/products",
-
         method: "GET",
-
         params,
       }),
 
@@ -278,11 +213,162 @@ export const fitmentApi = createApi({
     >({
       query: () => ({
         url: "/api/fitments/tree",
-
         method: "GET",
       }),
 
       providesTags: ["VehicleTree"],
+    }),
+
+    // DELETE MUTATIONS
+    deleteMake: builder.mutation<
+      { message: string },
+      string
+    >({
+      query: (id) => ({
+        url: `/api/fitments/makes/${id}`,
+        method: "DELETE",
+      }),
+
+      invalidatesTags: ["VehicleTree"],
+    }),
+
+    deleteModel: builder.mutation<
+      { message: string },
+      string
+    >({
+      query: (id) => ({
+        url: `/api/fitments/models/${id}`,
+        method: "DELETE",
+      }),
+
+      invalidatesTags: ["VehicleTree"],
+    }),
+
+    deleteGeneration: builder.mutation<
+      { message: string },
+      string
+    >({
+      query: (id) => ({
+        url: `/api/fitments/generations/${id}`,
+        method: "DELETE",
+      }),
+
+      invalidatesTags: ["VehicleTree"],
+    }),
+
+    deleteEngine: builder.mutation<
+      { message: string },
+      string
+    >({
+      query: (id) => ({
+        url: `/api/fitments/engines/${id}`,
+        method: "DELETE",
+      }),
+
+      invalidatesTags: ["VehicleTree"],
+    }),
+
+    deleteTrim: builder.mutation<
+      { message: string },
+      string
+    >({
+      query: (id) => ({
+        url: `/api/fitments/trims/${id}`,
+        method: "DELETE",
+      }),
+
+      invalidatesTags: ["VehicleTree"],
+    }),
+
+    // UPDATE MUTATIONS
+    updateMake: builder.mutation<
+      VehicleMake,
+      {
+        id: string;
+        data: Partial<
+          Omit<VehicleMake, "id">
+        >;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `/api/fitments/makes/${id}`,
+        method: "PUT",
+        data,
+      }),
+
+      invalidatesTags: ["VehicleTree"],
+    }),
+
+    updateModel: builder.mutation<
+      VehicleModel,
+      {
+        id: string;
+        data: Partial<
+          Omit<VehicleModel, "id">
+        >;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `/api/fitments/models/${id}`,
+        method: "PUT",
+        data,
+      }),
+
+      invalidatesTags: ["VehicleTree"],
+    }),
+
+    updateGeneration: builder.mutation<
+      VehicleGeneration,
+      {
+        id: string;
+        data: Partial<
+          Omit<VehicleGeneration, "id">
+        >;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `/api/fitments/generations/${id}`,
+        method: "PUT",
+        data,
+      }),
+
+      invalidatesTags: ["VehicleTree"],
+    }),
+
+    updateEngine: builder.mutation<
+      VehicleEngine,
+      {
+        id: string;
+        data: Partial<
+          Omit<VehicleEngine, "id">
+        >;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `/api/fitments/engines/${id}`,
+        method: "PUT",
+        data,
+      }),
+
+      invalidatesTags: ["VehicleTree"],
+    }),
+
+    updateTrim: builder.mutation<
+      VehicleTrim,
+      {
+        id: string;
+        data: Partial<
+          Omit<VehicleTrim, "id">
+        >;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `/api/fitments/trims/${id}`,
+        method: "PUT",
+        data,
+      }),
+
+      invalidatesTags: ["VehicleTree"],
     }),
   }),
 });
@@ -290,20 +376,24 @@ export const fitmentApi = createApi({
 // EXPORT HOOKS
 export const {
   useCreateMakeMutation,
-
   useCreateModelMutation,
-
   useCreateGenerationMutation,
-
   useCreateEngineMutation,
-
   useCreateTrimMutation,
-
   useAssignProductFitmentMutation,
-
   useBulkAssignProductFitmentMutation,
-
   useGetProductsByFitmentQuery,
-
   useGetVehicleTreeQuery,
+
+  useDeleteMakeMutation,
+  useDeleteModelMutation,
+  useDeleteGenerationMutation,
+  useDeleteEngineMutation,
+  useDeleteTrimMutation,
+
+  useUpdateMakeMutation,
+  useUpdateModelMutation,
+  useUpdateGenerationMutation,
+  useUpdateEngineMutation,
+  useUpdateTrimMutation,
 } = fitmentApi;

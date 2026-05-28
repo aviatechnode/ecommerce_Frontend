@@ -1,4 +1,4 @@
-import { shippingApi } from './../../services/shipmentApi';
+import { shipmentApi } from './../../services/shipmentApi';
 import { configureStore } from "@reduxjs/toolkit";
 import { useDispatch } from "react-redux";
 
@@ -27,12 +27,14 @@ import { shippingRateApi } from '../../services/shippingRateApi';
 import { courierApi } from '../../services/courierApi';
 import { shippingZoneApi } from '../../services/shippingZoneApi';
 import { pickupStationApi } from '../../services/pickupStationApi';
+import stepReducer from '../../admin/steps/util/stepSlice';
 
 /* ================= STORE ================= */
 
 export const store = configureStore({
   reducer: {
     roles: roleReducer,
+     step: stepReducer,
     
     /* RTK Query reducers */
     [authApi.reducerPath]: authApi.reducer,
@@ -47,7 +49,6 @@ export const store = configureStore({
     [cartApi.reducerPath]: cartApi.reducer,
     [wishlistApi.reducerPath]: wishlistApi.reducer,
     [reviewApi.reducerPath]: reviewApi.reducer,
-    [shippingApi.reducerPath]: shippingApi.reducer,
     [addressApi.reducerPath]: addressApi.reducer,
     [feedbackApi.reducerPath]: feedbackApi.reducer,
     [auditLogApi.reducerPath]: auditLogApi.reducer,
@@ -56,6 +57,7 @@ export const store = configureStore({
     [courierApi.reducerPath]:courierApi.reducer,
     [shippingZoneApi.reducerPath]: shippingZoneApi.reducer,
     [pickupStationApi.reducerPath]: pickupStationApi.reducer,
+    [shipmentApi.reducerPath]: shipmentApi.reducer,
   },
 
   middleware: (getDefaultMiddleware) =>
@@ -72,7 +74,6 @@ export const store = configureStore({
       cartApi.middleware,
       wishlistApi.middleware,
       reviewApi.middleware,
-      shippingApi.middleware,
       addressApi.middleware,
       feedbackApi.middleware,
       auditLogApi.middleware,
@@ -81,6 +82,7 @@ export const store = configureStore({
       courierApi.middleware,
       shippingZoneApi.middleware,
       pickupStationApi.middleware,
+      shipmentApi.middleware,
     ),
 });
 

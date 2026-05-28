@@ -1,12 +1,68 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { axiosBaseQuery } from "../api/axiosBaseQuery";
 
+//////////////////////////////////////////////////////////
+// TYPES
+//////////////////////////////////////////////////////////
+
+export interface CartItem {
+  id: string;
+  cartId: string;
+  variantId: string;
+  quantity: number;
+  unitPrice: number;
+
+  variant?: {
+    id: string;
+    weight?: number | string | null;
+
+    product?: {
+      id: string;
+      name: string;
+      medias?: {
+        id?: string;
+        url: string;
+      }[];
+    };
+  };
+}
+
+export interface CartResponse {
+  cart: {
+    id: string;
+    userId: string;
+    items: CartItem[];
+
+    deliveryStateId?: string | null;
+    deliveryLgaId?: string | null;
+    shippingZoneId?: string | null;
+  } | null;
+
+  totals: {
+    subtotal: number;
+    totalItems: number;
+  };
+
+  shipping?: {
+    shippingMethod?: string;
+    deliveryFee?: number;
+    estimatedDays?: number;
+    courier?: any;
+    pickupStation?: any;
+    shippingRate?: any;
+    zone?: any;
+    weight?: number;
+    error?: string;
+  } | null;
+
+  grandTotal: number;
+}
 
 //////////////////////////////////////////////////////////
-// HELPERS (CLIENT SIDE CART ENGINE)
+// HELPERS
 //////////////////////////////////////////////////////////
 
-function recalcCart(draft: any) {
+function recalcCart(draft: CartResponse) {
   if (!draft?.cart?.items) return;
 
   let subtotal = 0;
@@ -22,7 +78,8 @@ function recalcCart(draft: any) {
     totalItems,
   };
 
-  draft.grandTotal = subtotal + Number(draft.shipping || 0);
+  draft.grandTotal =
+    subtotal + Number(draft.shipping?.deliveryFee || 0);
 }
 
 //////////////////////////////////////////////////////////
@@ -35,55 +92,75 @@ export const cartApi = createApi({
   tagTypes: ["Cart"],
 
   endpoints: (builder) => ({
-
     //////////////////////////////////////////////////////////
-    // GET CART (FIXED: void arg)
+    // GET CART
     //////////////////////////////////////////////////////////
-    getCart: builder.query<any, void>({
-      query: () => ({
+    getCart: builder.query<
+      CartResponse,
+      {
+        stateId?: string;
+        lgaId?: string;
+        shippingMethod?: string;
+        pickupStationId?: string;
+      } | void
+    >({
+      query: (params) => ({
         url: "/api/cart",
         method: "GET",
+        params,
       }),
+
       providesTags: ["Cart"],
     }),
 
     //////////////////////////////////////////////////////////
-    // ADD TO CART (OPTIMISTIC)
+    // ADD TO CART
     //////////////////////////////////////////////////////////
     addToCart: builder.mutation<
       any,
-      { variantId: string; quantity: number; unitPrice?: number }
+      {
+        variantId: string;
+        quantity: number;
+      }
     >({
-      query: (arg) => ({
+      query: (data) => ({
         url: "/api/cart/add",
         method: "POST",
-        data: arg,
+        data,
       }),
 
-      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+      async onQueryStarted(
+        arg,
+        { dispatch, queryFulfilled }
+      ) {
         const patch = dispatch(
-          cartApi.util.updateQueryData("getCart", undefined, (draft: any) => {
-            if (!draft?.cart) return;
+          cartApi.util.updateQueryData(
+            "getCart",
+            undefined,
+            (draft) => {
+              if (!draft?.cart) return;
 
-            const item = draft.cart.items.find(
-              (i: any) => i.variantId === arg.variantId
-            );
+              const existingItem =
+                draft.cart.items.find(
+                  (item) =>
+                    item.variantId === arg.variantId
+                );
 
-            if (item) {
-              item.quantity += arg.quantity;
-            } else {
-              draft.cart.items.push({
-                id: `temp-${Date.now()}`,
-                cartId: draft.cart.id,
-                variantId: arg.variantId,
-                quantity: arg.quantity,
-                unitPrice: arg.unitPrice ?? 0,
-                variant: undefined,
-              });
+              if (existingItem) {
+                existingItem.quantity += arg.quantity;
+              } else {
+                draft.cart.items.push({
+                  id: `temp-${Date.now()}`,
+                  cartId: draft.cart.id,
+                  variantId: arg.variantId,
+                  quantity: arg.quantity,
+                  unitPrice: 0,
+                });
+              }
+
+              recalcCart(draft);
             }
-
-            recalcCart(draft);
-          })
+          )
         );
 
         try {
@@ -101,30 +178,38 @@ export const cartApi = createApi({
     //////////////////////////////////////////////////////////
     updateCartItem: builder.mutation<
       any,
-      { id: string; quantity: number }
+      {
+        id: string;
+        quantity: number;
+      }
     >({
-      query: (arg) => ({
-        url: `/api/cart/item/${arg.id}`,
+      query: ({ id, quantity }) => ({
+        url: `/api/cart/item/${id}`,
         method: "PUT",
-        data: { quantity: arg.quantity },
+        data: { quantity },
       }),
 
-      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
+      async onQueryStarted(
+        arg,
+        { dispatch, queryFulfilled }
+      ) {
         const patch = dispatch(
-          cartApi.util.updateQueryData("getCart", undefined, (draft: any) => {
-            const item = draft?.cart?.items?.find(
-              (i: any) => i.id === arg.id
-            );
+          cartApi.util.updateQueryData(
+            "getCart",
+            undefined,
+            (draft) => {
+              const item =
+                draft?.cart?.items?.find(
+                  (i) => i.id === arg.id
+                );
 
-            if (!item) return;
+              if (!item) return;
 
-            const oldQty = item.quantity;
-            item.quantity = arg.quantity;
+              item.quantity = arg.quantity;
 
-            item._diff = arg.quantity - oldQty;
-
-            recalcCart(draft);
-          })
+              recalcCart(draft);
+            }
+          )
         );
 
         try {
@@ -140,23 +225,38 @@ export const cartApi = createApi({
     //////////////////////////////////////////////////////////
     // REMOVE ITEM
     //////////////////////////////////////////////////////////
-    removeCartItem: builder.mutation<any, string>({
-      query: (id) => ({
-        url: `/api/cart/item/${id}`,
+    removeCartItem: builder.mutation<
+      any,
+      {
+        variantId: string;
+      }
+    >({
+      query: (data) => ({
+        url: "/api/cart/item",
         method: "DELETE",
+        data,
       }),
 
-      async onQueryStarted(id, { dispatch, queryFulfilled }) {
+      async onQueryStarted(
+        arg,
+        { dispatch, queryFulfilled }
+      ) {
         const patch = dispatch(
-          cartApi.util.updateQueryData("getCart", undefined, (draft: any) => {
-            if (!draft?.cart) return;
+          cartApi.util.updateQueryData(
+            "getCart",
+            undefined,
+            (draft) => {
+              if (!draft?.cart) return;
 
-            draft.cart.items = draft.cart.items.filter(
-              (item: any) => item.id !== id
-            );
+              draft.cart.items =
+                draft.cart.items.filter(
+                  (item) =>
+                    item.variantId !== arg.variantId
+                );
 
-            recalcCart(draft);
-          })
+              recalcCart(draft);
+            }
+          )
         );
 
         try {
@@ -170,23 +270,38 @@ export const cartApi = createApi({
     }),
 
     //////////////////////////////////////////////////////////
-    // CLEAR CART (FIXED: void arg)
+    // CLEAR CART
     //////////////////////////////////////////////////////////
     clearCart: builder.mutation<any, void>({
       query: () => ({
         url: "/api/cart/clear",
         method: "DELETE",
+        data: {},
       }),
 
-      async onQueryStarted(_, { dispatch, queryFulfilled }) {
+      async onQueryStarted(
+        _,
+        { dispatch, queryFulfilled }
+      ) {
         const patch = dispatch(
-          cartApi.util.updateQueryData("getCart", undefined, (draft: any) => {
-            if (!draft?.cart) return;
+          cartApi.util.updateQueryData(
+            "getCart",
+            undefined,
+            (draft) => {
+              if (!draft?.cart) return;
 
-            draft.cart.items = [];
-            draft.totals = { subtotal: 0, totalItems: 0 };
-            draft.grandTotal = 0;
-          })
+              draft.cart.items = [];
+
+              draft.totals = {
+                subtotal: 0,
+                totalItems: 0,
+              };
+
+              draft.shipping = null;
+
+              draft.grandTotal = 0;
+            }
+          )
         );
 
         try {
@@ -195,6 +310,115 @@ export const cartApi = createApi({
           patch.undo();
         }
       },
+
+      invalidatesTags: ["Cart"],
+    }),
+
+    //////////////////////////////////////////////////////////
+    // UPDATE DELIVERY
+    //////////////////////////////////////////////////////////
+    updateCartDelivery: builder.mutation<
+      any,
+      {
+        deliveryStateId?: string;
+        deliveryLgaId?: string;
+        shippingZoneId?: string;
+      }
+    >({
+      query: (data) => ({
+        url: "/api/cart/delivery",
+        method: "PATCH",
+        data,
+      }),
+
+      async onQueryStarted(
+        arg,
+        { dispatch, queryFulfilled }
+      ) {
+        const patch = dispatch(
+          cartApi.util.updateQueryData(
+            "getCart",
+            undefined,
+            (draft) => {
+              if (!draft?.cart) return;
+
+              if (
+                arg.deliveryStateId !== undefined
+              ) {
+                draft.cart.deliveryStateId =
+                  arg.deliveryStateId;
+              }
+
+              if (
+                arg.deliveryLgaId !== undefined
+              ) {
+                draft.cart.deliveryLgaId =
+                  arg.deliveryLgaId;
+              }
+
+              if (
+                arg.shippingZoneId !== undefined
+              ) {
+                draft.cart.shippingZoneId =
+                  arg.shippingZoneId;
+              }
+            }
+          )
+        );
+
+        try {
+          await queryFulfilled;
+        } catch {
+          patch.undo();
+        }
+      },
+
+      invalidatesTags: ["Cart"],
+    }),
+
+    //////////////////////////////////////////////////////////
+    // CALCULATE SHIPPING
+    //////////////////////////////////////////////////////////
+    calculateCartShipping: builder.mutation<
+      {
+        shippingMethod: string;
+        deliveryFee: number;
+        estimatedDays: number;
+        courier?: any;
+        pickupStation?: any;
+        shippingRate?: any;
+        zone?: any;
+        weight?: number;
+      },
+      {
+        deliveryStateId: string;
+        deliveryLgaId: string;
+      }
+    >({
+      query: (data) => ({
+        url: "/api/cart/shipping/calculate",
+        method: "POST",
+        data,
+      }),
+    }),
+
+    //////////////////////////////////////////////////////////
+    // MERGE CART
+    //////////////////////////////////////////////////////////
+    mergeCart: builder.mutation<
+      any,
+      {
+        items: Array<{
+          variantId: string;
+          quantity: number;
+        }>;
+      }
+    >({
+      query: (data) => ({
+        url: "/api/cart/merge",
+        method: "POST",
+        data,
+      }),
 
       invalidatesTags: ["Cart"],
     }),
@@ -202,7 +426,7 @@ export const cartApi = createApi({
 });
 
 //////////////////////////////////////////////////////////
-// HOOKS
+// EXPORT HOOKS
 //////////////////////////////////////////////////////////
 
 export const {
@@ -211,4 +435,7 @@ export const {
   useUpdateCartItemMutation,
   useRemoveCartItemMutation,
   useClearCartMutation,
+  useUpdateCartDeliveryMutation,
+  useCalculateCartShippingMutation,
+  useMergeCartMutation,
 } = cartApi;

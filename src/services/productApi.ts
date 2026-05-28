@@ -1,10 +1,6 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
-
 import { axiosBaseQuery } from "../api/axiosBaseQuery";
-
-import type {
-  CreateProductInput,
-} from "../schemas/product.schema";
+import type { CreateProductInput } from "../schemas/product.schema";
 
 /* =========================================================
 PRODUCT TYPE
@@ -12,23 +8,19 @@ PRODUCT TYPE
 
 export type Product = CreateProductInput & {
   id: string;
-
   slug: string;
-
   createdAt: string;
   updatedAt: string;
-
   viewCount: number;
   soldCount: number;
 };
 
 /* =========================================================
-UPDATE PAYLOAD
+UPDATE PAYLOAD (ACCEPTS ANY SUBSET OF PRODUCT FIELDS)
 ========================================================= */
 
 export interface UpdateProductPayload {
   id: string;
-
   data: Partial<CreateProductInput>;
 }
 
@@ -37,24 +29,14 @@ API RESPONSES
 ========================================================= */
 
 export interface ProductsResponse {
-  success?: boolean;
-
-  message?: string;
-
   products: Product[];
 }
 
 export interface ProductResponse {
-  success?: boolean;
-
-  message?: string;
-
   product: Product;
 }
 
 export interface DeleteProductResponse {
-  success?: boolean;
-
   message?: string;
 }
 
@@ -64,12 +46,11 @@ API
 
 export const productApi = createApi({
   reducerPath: "productApi",
-
   baseQuery: axiosBaseQuery(),
-
   tagTypes: ["Products", "Product"],
 
   endpoints: (builder) => ({
+
     /* =====================================================
     GET PRODUCTS
     ===================================================== */
@@ -77,36 +58,21 @@ export const productApi = createApi({
     getProducts: builder.query<Product[], void>({
       query: () => ({
         url: "/api/products",
-
         method: "GET",
       }),
 
-      transformResponse: (
-        response: ProductsResponse
-      ) => response.products ?? [],
+      transformResponse: (res: ProductsResponse) => res.products ?? [],
 
       providesTags: (result) =>
         result
           ? [
-              ...result.map((product) => ({
+              ...result.map((p) => ({
                 type: "Product" as const,
-
-                id: product.id,
+                id: p.id,
               })),
-
-              {
-                type: "Products" as const,
-
-                id: "LIST",
-              },
+              { type: "Products" as const, id: "LIST" },
             ]
-          : [
-              {
-                type: "Products" as const,
-
-                id: "LIST",
-              },
-            ],
+          : [{ type: "Products" as const, id: "LIST" }],
     }),
 
     /* =====================================================
@@ -116,20 +82,13 @@ export const productApi = createApi({
     getProduct: builder.query<Product, string>({
       query: (id) => ({
         url: `/api/products/${id}`,
-
         method: "GET",
       }),
 
-      transformResponse: (
-        response: ProductResponse
-      ) => response.product,
+      transformResponse: (res: ProductResponse) => res.product,
 
       providesTags: (_, __, id) => [
-        {
-          type: "Product",
-
-          id,
-        },
+        { type: "Product", id },
       ],
     }),
 
@@ -137,29 +96,18 @@ export const productApi = createApi({
     CREATE PRODUCT
     ===================================================== */
 
-    createProduct: builder.mutation<
-      Product,
-      CreateProductInput
-    >({
+    createProduct: builder.mutation<Product, CreateProductInput>({
       query: (data) => ({
         url: "/api/products",
-
         method: "POST",
-
         data,
       }),
 
-      transformResponse: (
-        response: ProductResponse
-      ) => response.product,
+      transformResponse: (res: ProductResponse) => res.product,
 
-      async onQueryStarted(
-        _,
-        { dispatch, queryFulfilled }
-      ) {
+      async onQueryStarted(_, { dispatch, queryFulfilled }) {
         try {
-          const { data: created } =
-            await queryFulfilled;
+          const { data: created } = await queryFulfilled;
 
           dispatch(
             productApi.util.updateQueryData(
@@ -170,91 +118,54 @@ export const productApi = createApi({
               }
             )
           );
-        } catch {
-          // ignore optimistic failure
-        }
+        } catch {}
       },
 
-      invalidatesTags: [
-        {
-          type: "Products",
-
-          id: "LIST",
-        },
-      ],
+      invalidatesTags: [{ type: "Products", id: "LIST" }],
     }),
 
     /* =====================================================
-    UPDATE PRODUCT
+    UPDATE PRODUCT (FULL REPLACEMENT OF ANY FIELD)
     ===================================================== */
 
-    updateProduct: builder.mutation<
-      Product,
-      UpdateProductPayload
-    >({
+    updateProduct: builder.mutation<Product, UpdateProductPayload>({
       query: ({ id, data }) => ({
         url: `/api/products/${id}`,
-
-        method: "PUT",
-
+        method: "PATCH",
         data,
       }),
 
-      transformResponse: (
-        response: ProductResponse
-      ) => response.product,
+      transformResponse: (res: ProductResponse) => res.product,
 
-      async onQueryStarted(
-        { id, data },
-        { dispatch, queryFulfilled }
-      ) {
+      async onQueryStarted({ id, data }, { dispatch, queryFulfilled }) {
+        // Optimistic update for single product cache
         const patchSingle = dispatch(
-          productApi.util.updateQueryData(
-            "getProduct",
-            id,
-            (draft) => {
-              Object.assign(draft, data);
-            }
-          )
+          productApi.util.updateQueryData("getProduct", id, (draft) => {
+            Object.assign(draft, data);
+          })
         );
 
+        // Optimistic update for products list cache
         const patchList = dispatch(
-          productApi.util.updateQueryData(
-            "getProducts",
-            undefined,
-            (draft) => {
-              const existing = draft.find(
-                (p) => p.id === id
-              );
-
-              if (existing) {
-                Object.assign(existing, data);
-              }
+          productApi.util.updateQueryData("getProducts", undefined, (draft) => {
+            const existing = draft.find((p) => p.id === id);
+            if (existing) {
+              Object.assign(existing, data);
             }
-          )
+          })
         );
 
         try {
           await queryFulfilled;
         } catch {
           patchSingle.undo();
-
           patchList.undo();
         }
       },
 
       invalidatesTags: (_, __, arg) => [
-        {
-          type: "Product",
-
-          id: arg.id,
-        },
-
-        {
-          type: "Products",
-
-          id: "LIST",
-        },
+        { type: "Product", id: arg.id },
+        { type: "Products", id: "LIST" },
       ],
     }),
 
@@ -262,30 +173,17 @@ export const productApi = createApi({
     DELETE PRODUCT
     ===================================================== */
 
-    deleteProduct: builder.mutation<
-      DeleteProductResponse,
-      string
-    >({
+    deleteProduct: builder.mutation<DeleteProductResponse, string>({
       query: (id) => ({
         url: `/api/products/${id}`,
-
         method: "DELETE",
       }),
 
-      async onQueryStarted(
-        id,
-        { dispatch, queryFulfilled }
-      ) {
+      async onQueryStarted(id, { dispatch, queryFulfilled }) {
         const patch = dispatch(
-          productApi.util.updateQueryData(
-            "getProducts",
-            undefined,
-            (draft) => {
-              return draft.filter(
-                (p) => p.id !== id
-              );
-            }
-          )
+          productApi.util.updateQueryData("getProducts", undefined, (draft) => {
+            return draft.filter((p) => p.id !== id);
+          })
         );
 
         try {
@@ -296,17 +194,8 @@ export const productApi = createApi({
       },
 
       invalidatesTags: (_, __, id) => [
-        {
-          type: "Product",
-
-          id,
-        },
-
-        {
-          type: "Products",
-
-          id: "LIST",
-        },
+        { type: "Product", id },
+        { type: "Products", id: "LIST" },
       ],
     }),
   }),
@@ -319,7 +208,6 @@ HOOKS
 export const {
   useGetProductsQuery,
   useGetProductQuery,
-
   useCreateProductMutation,
   useUpdateProductMutation,
   useDeleteProductMutation,

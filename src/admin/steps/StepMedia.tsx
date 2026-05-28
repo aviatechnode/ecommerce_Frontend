@@ -7,7 +7,8 @@ import {
 } from "react-hook-form";
 
 import type { ProductFormValues } from "../../types/product.form.types";
-import type { ProductMedia } from "../store/productBuilderStore";
+import type { ProductMedia } from "../../schemas/product.schema";
+
 
 /* =========================================================
    CONSTANTS
@@ -39,6 +40,9 @@ function StepMedia({
      Upload handler
   --------------------------------------------------------- */
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    // Prevent concurrent uploads
+    if (uploading) return;
+
     const files = e.target.files;
     if (!files?.length) return;
 
@@ -47,6 +51,9 @@ function StepMedia({
 
     try {
       const fileArray = Array.from(files);
+      // Capture current media count to compute correct positions
+      const startPosition = fields.length;
+
       const uploadPromises = fileArray.map(async (file, idx) => {
         const formData = new FormData();
         formData.append("file", file);
@@ -69,14 +76,16 @@ function StepMedia({
         const media: ProductMedia = {
           url: data.secure_url,
           type: file.type.startsWith("video") ? "VIDEO" : "IMAGE",
-          position: fields.length + idx,
+          position: startPosition + idx, // guaranteed unique per product
         };
         return media;
       });
 
       const uploadedMedia = await Promise.all(uploadPromises);
-      uploadedMedia.forEach((media) => append(media));
-      e.target.value = ""; // reset input
+      // Append all new media in one batch to avoid race conditions
+      append(uploadedMedia);
+      // Reset file input to allow re-uploading the same files if needed
+      e.target.value = "";
     } catch (err) {
       console.error("Upload failed", err);
       setUploadError(err instanceof Error ? err.message : "Failed to upload one or more files");

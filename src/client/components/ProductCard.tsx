@@ -159,8 +159,8 @@ export default function ProductCard({ product }: Props) {
         group relative flex flex-col
         overflow-hidden rounded-xl
         border border-gray-200 bg-white
-        shadow-sm transition-all duration-200
-        hover:shadow-md hover:border-green-200
+        transition-all duration-200
+        hover:border-green-200
         cursor-pointer
       "
     >

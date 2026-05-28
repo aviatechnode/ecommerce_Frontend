@@ -5,6 +5,7 @@ CUSTOM SCROLLBAR
 ======================================== */
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
+  height: 2px
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
@@ -22,10 +23,11 @@ ANIMATIONS
 @keyframes fade-in {
   from {
     opacity: 0;
+    transform: translateY(10px);
   }
-
   to {
     opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -34,7 +36,6 @@ ANIMATIONS
     opacity: 0;
     transform: translateY(20px);
   }
-
   to {
     opacity: 1;
     transform: translateY(0);
@@ -71,4 +72,13 @@ INPUT STYLES
 .input:focus {
   border-color: #22c55e;
   box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3);
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.animate-shimmer {
+  animation: shimmer 1.5s infinite;
 }

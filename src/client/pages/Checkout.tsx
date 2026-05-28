@@ -7,7 +7,6 @@ import {
 } from "../../services/addressApi";
 import {
   useCreateCheckoutMutation,
-  useInitializePaymentMutation,
   usePreviewCouponMutation,
 } from "../../services/checkoutApi";
 import { useGetCartQuery } from "../../services/cartApi";
@@ -17,6 +16,7 @@ import {
 } from "../../services/locationApi";
 import { ChevronLeft, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import type { CheckoutResponse } from "../../types/checkout-types";
 
 /* ================= TYPES ================= */
 interface AddressFormData {
@@ -30,6 +30,7 @@ interface AddressFormData {
   landmark?: string;
   isDefault: boolean;
 }
+
 interface CartItemForDisplay {
   id: string;
   name: string;
@@ -38,6 +39,8 @@ interface CartItemForDisplay {
   image?: string;
   unitPrice?: number;
 }
+
+type ShippingMethod = "STANDARD" | "EXPRESS" | "SAME_DAY" | "PICKUP_STATION";
 
 /* ================= HELPER ================= */
 const buildFullAddress = (
@@ -53,7 +56,6 @@ const buildFullAddress = (
   return parts.join(", ");
 };
 
-// Transform raw cart item from API to display format
 const transformCartItem = (item: any): CartItemForDisplay => ({
   id: item.id,
   name: item.variant?.product?.name ?? "Product",
@@ -77,7 +79,6 @@ const LoadingSpinner: React.FC<{ size?: "sm" | "md" | "lg" }> = ({ size = "md" }
   );
 };
 
-// Skeleton Components
 const AddressSectionSkeleton: React.FC = () => (
   <div className="bg-white rounded-xl shadow-sm p-6 animate-pulse">
     <div className="h-7 bg-gray-200 rounded w-48 mb-4"></div>
@@ -554,6 +555,49 @@ const CouponSection: React.FC<{
   );
 };
 
+const ShippingMethodSelector: React.FC<{
+  selectedMethod: ShippingMethod;
+  onMethodChange: (method: ShippingMethod) => void;
+}> = ({ selectedMethod, onMethodChange }) => {
+  const methods: { value: ShippingMethod; label: string; description: string }[] = [
+    { value: "STANDARD", label: "Standard Delivery", description: "3-5 business days" },
+    { value: "EXPRESS", label: "Express Delivery", description: "1-2 business days" },
+    { value: "SAME_DAY", label: "Same Day Delivery", description: "Within 24 hours (order before 12PM)" },
+    { value: "PICKUP_STATION", label: "Pickup Station", description: "Collect from a nearby station (free)" },
+  ];
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-6">
+      <h2 className="text-xl font-semibold text-gray-900 mb-4">Shipping Method</h2>
+      <div className="space-y-3">
+        {methods.map((method) => (
+          <label
+            key={method.value}
+            className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+              selectedMethod === method.value
+                ? "border-green-500 bg-green-50"
+                : "border-gray-200 hover:border-green-300"
+            }`}
+          >
+            <input
+              type="radio"
+              name="shippingMethod"
+              value={method.value}
+              checked={selectedMethod === method.value}
+              onChange={() => onMethodChange(method.value)}
+              className="mt-0.5 text-green-600 focus:ring-green-500"
+            />
+            <div className="flex-1">
+              <p className="font-medium text-gray-900">{method.label}</p>
+              <p className="text-sm text-gray-500">{method.description}</p>
+            </div>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 /* ================= MAIN PAGE ================= */
 const CheckoutPage: React.FC = () => {
   // Fetch cart data
@@ -575,7 +619,6 @@ const CheckoutPage: React.FC = () => {
   const [createAddress, { isLoading: creatingAddress }] = useCreateAddressMutation();
   const [deleteAddress] = useDeleteAddressMutation();
   const [createCheckout, { isLoading: placeOrderLoading }] = useCreateCheckoutMutation();
-  const [initializePayment, { isLoading: paymentInitializing }] = useInitializePaymentMutation();
   const [previewCoupon, { isLoading: couponApplying }] = usePreviewCouponMutation();
   const navigate = useNavigate();
 
@@ -597,12 +640,11 @@ const CheckoutPage: React.FC = () => {
   // Local state
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [useNewAddress, setUseNewAddress] = useState(false);
+  const [shippingMethod, setShippingMethod] = useState<ShippingMethod>("STANDARD");
   const [couponCode, setCouponCode] = useState("");
   const [couponPreview, setCouponPreview] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [successOrder, setSuccessOrder] = useState<any>(null);
-  const [shippingFee, setShippingFee] = useState(0);
-  const [finalAmount, setFinalAmount] = useState(0);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
 
   const [newAddressForm, setNewAddressForm] = useState<AddressFormData>({
@@ -621,20 +663,21 @@ const CheckoutPage: React.FC = () => {
   useEffect(() => {
     if (newAddressForm.state !== selectedStateId) {
       setSelectedStateId(newAddressForm.state);
-      // Reset lga field when state changes
       if (newAddressForm.lga) {
         setNewAddressForm((prev) => ({ ...prev, lga: "" }));
       }
     }
   }, [newAddressForm.state, selectedStateId]);
 
-  // Extract real cart data
   const rawCartItems = cartData?.cart?.items ?? [];
   const cartItemsDisplay = rawCartItems.map(transformCartItem);
   const cartSubtotal = cartData?.totals?.subtotal ?? 0;
   const initialShipping = cartData?.shipping ?? 0;
 
-  // Update shipping and final amount when cart loads
+  const [shippingFee, setShippingFee] = useState(0);
+  const [finalAmount, setFinalAmount] = useState(0);
+
+  // Update shipping and final amount when cart loads or coupon changes
   useEffect(() => {
     if (!cartLoading && cartData) {
       setShippingFee(initialShipping);
@@ -654,7 +697,6 @@ const CheckoutPage: React.FC = () => {
     }
   }, [addressLoading, savedAddresses, selectedAddressId]);
 
-  // Show skeleton loader only when cart or address is loading initially
   if (cartLoading || addressLoading) {
     return (
       <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
@@ -681,7 +723,6 @@ const CheckoutPage: React.FC = () => {
     );
   }
 
-  // Error handling for cart
   if (cartError) {
     const errorMsg =
       (cartErrorObj as any)?.data?.message || "Failed to load your cart. Please try again.";
@@ -700,7 +741,6 @@ const CheckoutPage: React.FC = () => {
     );
   }
 
-  // Empty cart
   if (cartItemsDisplay.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -712,6 +752,40 @@ const CheckoutPage: React.FC = () => {
           >
             Go back
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isRedirecting) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg
+              className="w-8 h-8 text-green-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Order Placed!</h2>
+          <p className="text-gray-600 mb-4">
+            Your order has been created successfully.
+          </p>
+          <p className="text-sm text-gray-500 mb-6">
+            Redirecting you to complete payment...
+          </p>
+          <div className="flex justify-center">
+            <LoadingSpinner />
+          </div>
         </div>
       </div>
     );
@@ -752,7 +826,6 @@ const CheckoutPage: React.FC = () => {
       return;
     }
 
-    // Find state and LGA names for building full address
     const selectedState = states.find((s) => s.id === newAddressForm.state);
     const selectedLga = lgas.find((l) => l.id === newAddressForm.lga);
 
@@ -798,7 +871,6 @@ const CheckoutPage: React.FC = () => {
         landmark: "",
         isDefault: false,
       });
-      // Reset selected state id for LGA dropdown
       setSelectedStateId("");
     } catch (err: any) {
       setError(err?.data?.message || "Failed to save address");
@@ -815,12 +887,9 @@ const CheckoutPage: React.FC = () => {
     try {
       await deleteAddress(addressId).unwrap();
       await refetchAddresses();
-      
-      // If the deleted address was selected, clear selection
       if (selectedAddressId === addressId) {
         setSelectedAddressId(null);
       }
-      
       setError(null);
     } catch (err: any) {
       setError(err?.data?.message || "Failed to delete address");
@@ -849,119 +918,87 @@ const CheckoutPage: React.FC = () => {
   };
 
   const handlePlaceOrder = async () => {
-    if (!selectedAddressId && !useNewAddress) {
-      setError("Please select or add a delivery address");
-      return;
-    }
+  if (!selectedAddressId && !useNewAddress) {
+    setError("Please select or add a delivery address");
+    return;
+  }
 
-    setError(null);
+  setError(null);
 
-    try {
-      const payload: any = {};
+  try {
+    const payload: any = {
+      shippingMethod: shippingMethod,
+    };
 
-      if (useNewAddress) {
-        if (
-          !newAddressForm.name ||
-          !newAddressForm.phone ||
-          !newAddressForm.street ||
-          !newAddressForm.city ||
-          !newAddressForm.state ||
-          !newAddressForm.lga
-        ) {
-          setError("Please complete the new address form");
-          return;
-        }
-
-        const selectedState = states.find((s) => s.id === newAddressForm.state);
-        const selectedLga = lgas.find((l) => l.id === newAddressForm.lga);
-
-        if (!selectedState || !selectedLga) {
-          setError("Invalid state or LGA selection");
-          return;
-        }
-
-        const fullAddress = buildFullAddress(
-          newAddressForm.street,
-          newAddressForm.area,
-          newAddressForm.city,
-          selectedLga.name,
-          selectedState.name
-        );
-
-        payload.address = {
-          name: newAddressForm.name,
-          phone: newAddressForm.phone,
-          stateId: newAddressForm.state,
-          lgaId: newAddressForm.lga,
-          city: newAddressForm.city,
-          area: newAddressForm.area,
-          street: newAddressForm.street,
-          landmark: newAddressForm.landmark,
-          fullAddress,
-        };
-      } else if (selectedAddressId) {
-        payload.addressId = selectedAddressId;
-      } else {
-        setError("No address selected");
+    if (useNewAddress) {
+      if (
+        !newAddressForm.name ||
+        !newAddressForm.phone ||
+        !newAddressForm.street ||
+        !newAddressForm.city ||
+        !newAddressForm.state ||
+        !newAddressForm.lga
+      ) {
+        setError("Please complete the new address form");
         return;
       }
 
-      if (couponPreview?.valid) {
-        payload.couponCode = couponCode;
+      const selectedState = states.find((s) => s.id === newAddressForm.state);
+      const selectedLga = lgas.find((l) => l.id === newAddressForm.lga);
+
+      if (!selectedState || !selectedLga) {
+        setError("Invalid state or LGA selection");
+        return;
       }
 
-      const checkoutResult = await createCheckout(payload).unwrap();
-      const orderData = (checkoutResult as any).order || (checkoutResult as any).data?.order;
-      if (!orderData) throw new Error("Invalid checkout response");
-
-      setShippingFee((checkoutResult as any).shippingFee ?? 0);
-      setSuccessOrder(orderData);
-
-      const paymentResult = await initializePayment({
-        orderId: orderData.id,
-      }).unwrap();
-
-      window.location.href = paymentResult.authorization_url;
-    } catch (err: any) {
-      setError(err?.data?.message || err?.message || "Failed to place order");
+      payload.address = {
+        name: newAddressForm.name,
+        phone: newAddressForm.phone,
+        stateId: newAddressForm.state,
+        lgaId: newAddressForm.lga,
+        city: newAddressForm.city,
+        area: newAddressForm.area,
+        street: newAddressForm.street,
+        landmark: newAddressForm.landmark,
+      };
+    } else if (selectedAddressId) {
+      payload.addressId = selectedAddressId;
+    } else {
+      setError("No address selected");
+      return;
     }
-  };
 
-  // Success / redirecting view
-  if (successOrder && paymentInitializing) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg
-              className="w-8 h-8 text-green-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Order Placed!</h2>
-          <p className="text-gray-600 mb-4">
-            Your order #{successOrder.orderNumber} has been created successfully.
-          </p>
-          <p className="text-sm text-gray-500 mb-6">
-            Redirecting you to complete payment...
-          </p>
-          <div className="flex justify-center">
-            <LoadingSpinner />
-          </div>
-        </div>
-      </div>
-    );
+    if (couponPreview?.valid) {
+      payload.couponCode = couponCode;
+    }
+
+    if (shippingMethod === "PICKUP_STATION") {
+      // TODO: Implement pickup station selection
+      payload.pickupStationId = null;
+    }
+
+    const result = await createCheckout(payload).unwrap();
+
+    // Handle duplicate response
+    if ("data" in result && result.message === "Duplicate request") {
+      setError("Order already processed. Please check your orders.");
+      return;
+    }
+
+    // Now TypeScript knows it's a successful CheckoutResponse
+    const checkoutResponse = result as CheckoutResponse;
+    const { authorizationUrl } = checkoutResponse;
+
+    if (!authorizationUrl) {
+      throw new Error("No authorization URL returned");
+    }
+
+    setIsRedirecting(true);
+    window.location.href = authorizationUrl;
+  } catch (err: any) {
+    setError(err?.data?.message || err?.message || "Failed to place order");
   }
-
+};
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
@@ -974,7 +1011,7 @@ const CheckoutPage: React.FC = () => {
             onClick={() => navigate(-1)}
             className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-green-600 transition-colors border border-gray-300 rounded-lg hover:border-green-500"
           >
-           <ChevronLeft size={20} className="group-hover:-translate-x-1 transition" />
+            <ChevronLeft size={20} className="group-hover:-translate-x-1 transition" />
             Back
           </button>
         </div>
@@ -988,7 +1025,6 @@ const CheckoutPage: React.FC = () => {
           </div>
         )}
 
-        {/* Show location API error if needed */}
         {statesError && (
           <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
             Failed to load states. Please refresh the page.
@@ -1015,6 +1051,10 @@ const CheckoutPage: React.FC = () => {
               lgas={lgas}
               lgasLoading={lgasLoading || lgasFetching}
             />
+            <ShippingMethodSelector
+              selectedMethod={shippingMethod}
+              onMethodChange={setShippingMethod}
+            />
             <CouponSection
               couponCode={couponCode}
               setCouponCode={setCouponCode}
@@ -1040,7 +1080,7 @@ const CheckoutPage: React.FC = () => {
               onClick={handlePlaceOrder}
               disabled={
                 placeOrderLoading ||
-                paymentInitializing ||
+                isRedirecting ||
                 (!selectedAddressId && !useNewAddress) ||
                 (useNewAddress &&
                   (!newAddressForm.name ||
@@ -1052,8 +1092,8 @@ const CheckoutPage: React.FC = () => {
               }
               className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {(placeOrderLoading || paymentInitializing) && <LoadingSpinner size="sm" />}
-              {placeOrderLoading || paymentInitializing ? "Processing..." : "Place Order"}
+              {(placeOrderLoading || isRedirecting) && <LoadingSpinner size="sm" />}
+              {placeOrderLoading || isRedirecting ? "Processing..." : "Place Order"}
             </button>
             <p className="text-xs text-gray-500 text-center">
               By placing your order, you agree to our Terms of Service and Privacy Policy.

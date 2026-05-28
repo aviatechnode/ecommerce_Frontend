@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Facebook,
@@ -8,7 +8,6 @@ import {
   Mail,
   Phone,
   MapPin,
-  Send,
   ChevronRight,
   Shield,
   Truck,
@@ -20,30 +19,17 @@ import {
 
 const Footer = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
-  const [subscribed, setSubscribed] = useState(false);
 
   const handleNavigation = (path: string) => {
     navigate(path);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleSubscribe = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (email) {
-      setSubscribed(true);
-      setEmail("");
-      setTimeout(() => setSubscribed(false), 3000);
-      // TODO: Integrate with actual newsletter API
-      console.log("Newsletter subscription:", email);
-    }
-  };
-
   return (
     <footer className="bg-white/95 backdrop-blur-xl border-t border-gray-100 mt-auto font-sans">
       {/* Main Footer Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-8">
-        {/* Top Section: Logo + Newsletter */}
+        {/* Top Section: Logo only (newsletter removed) */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 pb-10 border-b border-gray-100">
           <div className="flex items-center gap-3 group cursor-pointer" onClick={() => handleNavigation("/")}>
             <img
@@ -59,43 +45,6 @@ const Footer = () => {
               </span>
               <span className="text-xs text-gray-500">Premium Auto Parts Since 2020</span>
             </div>
-          </div>
-
-          <div className="w-full lg:w-auto">
-            <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-3">
-              <div className="relative flex-1 min-w-[240px]">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Your email for offers & updates"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl py-2.5 pl-11 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                  required
-                />
-              </div>
-              <button
-                type="submit"
-                className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm transition-all ${
-                  subscribed
-                    ? "bg-emerald-600 text-white"
-                    : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md hover:shadow-lg"
-                }`}
-              >
-                {subscribed ? (
-                  <>Subscribed! ✓</>
-                ) : (
-                  <>
-                    Subscribe <Send size={14} />
-                  </>
-                )}
-              </button>
-            </form>
-            {subscribed && (
-              <p className="text-xs text-emerald-600 mt-2 animate-fade-in text-center sm:text-left">
-                Thanks for subscribing! Check your inbox.
-              </p>
-            )}
           </div>
         </div>
 
@@ -335,35 +284,31 @@ const Footer = () => {
             &copy; {new Date().getFullYear()} MOgrace Auto Parts. All rights reserved.
           </p>
           <div className="flex gap-2">
-  {/* Visa Logo - Now using a reliable SVG CDN */}
-  <img
-    src="https://dl.svgcdn.com/svg/logos/visa.svg"
-    alt="Visa"
-    className="h-6 w-auto opacity-80 hover:opacity-100 transition"
-  />
-  {/* Mastercard Logo - Keep as is or update for consistency */}
-  <img
-    src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Mastercard-logo.svg/1280px-Mastercard-logo.svg.png"
-    alt="Mastercard"
-    className="h-6 w-auto opacity-80 hover:opacity-100 transition"
-  />
-  {/* PayPal Logo - Keep as is */}
-  <img
-    src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/PayPal.svg/1280px-PayPal.svg.png"
-    alt="PayPal"
-    className="h-6 w-auto opacity-80 hover:opacity-100 transition"
-  />
-  {/* American Express Logo - Now using a direct Wikimedia Commons SVG */}
-  <img
-    src="https://upload.wikimedia.org/wikipedia/commons/f/fa/American_Express_logo_%282018%29.svg"
-    alt="American Express"
-    className="h-6 w-auto opacity-80 hover:opacity-100 transition"
-  />
-</div>
+            <img
+              src="https://dl.svgcdn.com/svg/logos/visa.svg"
+              alt="Visa"
+              className="h-6 w-auto opacity-80 hover:opacity-100 transition"
+            />
+            <img
+              src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Mastercard-logo.svg/1280px-Mastercard-logo.svg.png"
+              alt="Mastercard"
+              className="h-6 w-auto opacity-80 hover:opacity-100 transition"
+            />
+            <img
+              src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/PayPal.svg/1280px-PayPal.svg.png"
+              alt="PayPal"
+              className="h-6 w-auto opacity-80 hover:opacity-100 transition"
+            />
+            <img
+              src="https://upload.wikimedia.org/wikipedia/commons/f/fa/American_Express_logo_%282018%29.svg"
+              alt="American Express"
+              className="h-6 w-auto opacity-80 hover:opacity-100 transition"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Add custom animation for fade-in */}
+      {/* Add custom animation for fade-in (kept for any other animations) */}
       <style>{`
         @keyframes fade-in {
           from {
