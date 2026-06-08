@@ -240,75 +240,114 @@ const AdminFitments = () => {
     }
   }, [editingItem]);
 
-  // Helper functions to find IDs from names (unchanged)
+  // ============================================================
+  // CORRECTED HELPER FUNCTIONS (exact match, case-insensitive)
+  // ============================================================
   const findMakeIdByName = (makeName: string): string | undefined => {
-    const make = vehicleTree?.find(m =>
-      m.name.toLowerCase().includes(makeName.toLowerCase())
+    const make = vehicleTree?.find(
+      (m) => m.name.localeCompare(makeName, undefined, { sensitivity: 'base' }) === 0
     );
     return make?.id;
   };
 
   const findModelIdByName = (makeName: string, modelName: string): string | undefined => {
-    const make = vehicleTree?.find(m =>
-      m.name.toLowerCase().includes(makeName.toLowerCase())
+    const make = vehicleTree?.find(
+      (m) => m.name.localeCompare(makeName, undefined, { sensitivity: 'base' }) === 0
     );
-    const model = make?.models?.find(m =>
-      m.name.toLowerCase().includes(modelName.toLowerCase())
+    const model = make?.models?.find(
+      (m) => m.name.localeCompare(modelName, undefined, { sensitivity: 'base' }) === 0
     );
     return model?.id;
   };
 
-  const findGenerationIdByName = (makeName: string, modelName: string, generationName: string): string | undefined => {
-    const make = vehicleTree?.find(m =>
-      m.name.toLowerCase().includes(makeName.toLowerCase())
+  const findGenerationIdByName = (
+    makeName: string,
+    modelName: string,
+    generationName: string
+  ): string | undefined => {
+    const make = vehicleTree?.find(
+      (m) => m.name.localeCompare(makeName, undefined, { sensitivity: 'base' }) === 0
     );
-    const model = make?.models?.find(m =>
-      m.name.toLowerCase().includes(modelName.toLowerCase())
+    const model = make?.models?.find(
+      (m) => m.name.localeCompare(modelName, undefined, { sensitivity: 'base' }) === 0
     );
-    const generation = model?.generations?.find(g =>
-      g.name.toLowerCase().includes(generationName.toLowerCase())
+    const generation = model?.generations?.find(
+      (g) => g.name.localeCompare(generationName, undefined, { sensitivity: 'base' }) === 0
     );
     return generation?.id;
   };
 
-  const findEngineIdByCode = (makeName: string, modelName: string, generationName: string, engineCode: string): string | undefined => {
-    const make = vehicleTree?.find(m =>
-      m.name.toLowerCase().includes(makeName.toLowerCase())
+  // Standard engine lookup using full context (requires generation name)
+  const findEngineIdByCode = (
+    makeName: string,
+    modelName: string,
+    generationName: string,
+    engineCode: string
+  ): string | undefined => {
+    const make = vehicleTree?.find(
+      (m) => m.name.localeCompare(makeName, undefined, { sensitivity: 'base' }) === 0
     );
-    const model = make?.models?.find(m =>
-      m.name.toLowerCase().includes(modelName.toLowerCase())
+    const model = make?.models?.find(
+      (m) => m.name.localeCompare(modelName, undefined, { sensitivity: 'base' }) === 0
     );
-    const generation = model?.generations?.find(g =>
-      g.name.toLowerCase().includes(generationName.toLowerCase())
+    const generation = model?.generations?.find(
+      (g) => g.name.localeCompare(generationName, undefined, { sensitivity: 'base' }) === 0
     );
-    const engine = generation?.engines?.find(e =>
-      e.engineCode.toLowerCase().includes(engineCode.toLowerCase())
+    const engine = generation?.engines?.find(
+      (e) => e.engineCode.localeCompare(engineCode, undefined, { sensitivity: 'base' }) === 0
     );
     return engine?.id;
   };
 
-  const findTrimIdByName = (makeName: string, modelName: string, generationName: string, engineCode: string, trimName: string): string | undefined => {
-    const make = vehicleTree?.find(m =>
-      m.name.toLowerCase().includes(makeName.toLowerCase())
+  // Fallback: find engine by code anywhere in the tree (used when generation name is missing)
+  const findEngineIdByCodeOnly = (engineCode: string): string | undefined => {
+    for (const make of vehicleTree || []) {
+      for (const model of make.models || []) {
+        for (const gen of model.generations || []) {
+          const engine = gen.engines?.find(
+            (e) => e.engineCode.localeCompare(engineCode, undefined, { sensitivity: 'base' }) === 0
+          );
+          if (engine) return engine.id;
+        }
+      }
+    }
+    return undefined;
+  };
+
+  const findTrimIdByName = (
+    makeName: string,
+    modelName: string,
+    generationName: string,
+    engineCode: string,
+    trimName: string
+  ): string | undefined => {
+    const make = vehicleTree?.find(
+      (m) => m.name.localeCompare(makeName, undefined, { sensitivity: 'base' }) === 0
     );
-    const model = make?.models?.find(m =>
-      m.name.toLowerCase().includes(modelName.toLowerCase())
+    const model = make?.models?.find(
+      (m) => m.name.localeCompare(modelName, undefined, { sensitivity: 'base' }) === 0
     );
-    const generation = model?.generations?.find(g =>
-      g.name.toLowerCase().includes(generationName.toLowerCase())
+    const generation = model?.generations?.find(
+      (g) => g.name.localeCompare(generationName, undefined, { sensitivity: 'base' }) === 0
     );
-    const engine = generation?.engines?.find(e =>
-      e.engineCode.toLowerCase().includes(engineCode.toLowerCase())
+    const engine = generation?.engines?.find(
+      (e) => e.engineCode.localeCompare(engineCode, undefined, { sensitivity: 'base' }) === 0
     );
-    const trim = engine?.trims?.find(t =>
-      t.name.toLowerCase().includes(trimName.toLowerCase())
+    const trim = engine?.trims?.find(
+      (t) => t.name.localeCompare(trimName, undefined, { sensitivity: 'base' }) === 0
     );
     return trim?.id;
   };
 
-  // Convert search terms to IDs for the API query
+  // ============================================================
+  // CORRECTED SEARCH PARAMS (with robust engine resolution)
+  // ============================================================
   const searchParams = useMemo(() => {
-    let makeId, modelId, generationId, engineId, trimId;
+    let makeId: string | undefined;
+    let modelId: string | undefined;
+    let generationId: string | undefined;
+    let engineId: string | undefined;
+    let trimId: string | undefined;
 
     if (searchTerms.makeName) {
       makeId = findMakeIdByName(searchTerms.makeName);
@@ -317,14 +356,37 @@ const AdminFitments = () => {
         modelId = findModelIdByName(searchTerms.makeName, searchTerms.modelName);
 
         if (searchTerms.generationName && modelId) {
-          generationId = findGenerationIdByName(searchTerms.makeName, searchTerms.modelName, searchTerms.generationName);
+          generationId = findGenerationIdByName(
+            searchTerms.makeName,
+            searchTerms.modelName,
+            searchTerms.generationName
+          );
+        }
 
-          if (searchTerms.engineCode && generationId) {
-            engineId = findEngineIdByCode(searchTerms.makeName, searchTerms.modelName, searchTerms.generationName, searchTerms.engineCode);
+        if (searchTerms.engineCode) {
+          // Try to find engine using full context (generation name if available)
+          if (searchTerms.generationName && modelId) {
+            engineId = findEngineIdByCode(
+              searchTerms.makeName,
+              searchTerms.modelName,
+              searchTerms.generationName,
+              searchTerms.engineCode
+            );
+          }
+          // Fallback: search entire tree for engine code (no generation needed)
+          if (!engineId) {
+            engineId = findEngineIdByCodeOnly(searchTerms.engineCode);
+          }
 
-            if (searchTerms.trimName && engineId) {
-              trimId = findTrimIdByName(searchTerms.makeName, searchTerms.modelName, searchTerms.generationName, searchTerms.engineCode, searchTerms.trimName);
-            }
+          // Trim lookup requires generation name and resolved engine
+          if (engineId && searchTerms.trimName && searchTerms.generationName) {
+            trimId = findTrimIdByName(
+              searchTerms.makeName,
+              searchTerms.modelName,
+              searchTerms.generationName,
+              searchTerms.engineCode,
+              searchTerms.trimName
+            );
           }
         }
       }
@@ -340,7 +402,8 @@ const AdminFitments = () => {
     };
   }, [searchTerms, vehicleTree]);
 
-  const shouldSkipSearch = !searchTerms.makeName &&
+  const shouldSkipSearch =
+    !searchTerms.makeName &&
     !searchTerms.modelName &&
     !searchTerms.generationName &&
     !searchTerms.engineCode &&
@@ -958,7 +1021,7 @@ const AdminFitments = () => {
               />
               <datalist id="model-suggestions">
                 {searchTerms.makeName && vehicleTree
-                  ?.find(m => m.name.toLowerCase().includes(searchTerms.makeName.toLowerCase()))
+                  ?.find(m => m.name.localeCompare(searchTerms.makeName, undefined, { sensitivity: 'base' }) === 0)
                   ?.models?.map(model => (
                     <option key={model.id} value={model.name} />
                   ))}
@@ -977,8 +1040,8 @@ const AdminFitments = () => {
               />
               <datalist id="generation-suggestions">
                 {searchTerms.makeName && searchTerms.modelName && vehicleTree
-                  ?.find(m => m.name.toLowerCase().includes(searchTerms.makeName.toLowerCase()))
-                  ?.models?.find(m => m.name.toLowerCase().includes(searchTerms.modelName.toLowerCase()))
+                  ?.find(m => m.name.localeCompare(searchTerms.makeName, undefined, { sensitivity: 'base' }) === 0)
+                  ?.models?.find(m => m.name.localeCompare(searchTerms.modelName, undefined, { sensitivity: 'base' }) === 0)
                   ?.generations?.map(gen => (
                     <option key={gen.id} value={gen.name} />
                   ))}
@@ -988,7 +1051,7 @@ const AdminFitments = () => {
                 type="text"
                 placeholder="Engine code (e.g., 2JZ-GTE)"
                 value={searchTerms.engineCode}
-                disabled={!searchTerms.generationName}
+                disabled={!searchTerms.modelName}
                 onChange={(e) =>
                   setSearchTerms((p) => ({ ...p, engineCode: e.target.value, trimName: "" }))
                 }
@@ -996,11 +1059,12 @@ const AdminFitments = () => {
                 list="engine-suggestions"
               />
               <datalist id="engine-suggestions">
-                {searchTerms.makeName && searchTerms.modelName && searchTerms.generationName && vehicleTree
-                  ?.find(m => m.name.toLowerCase().includes(searchTerms.makeName.toLowerCase()))
-                  ?.models?.find(m => m.name.toLowerCase().includes(searchTerms.modelName.toLowerCase()))
-                  ?.generations?.find(g => g.name.toLowerCase().includes(searchTerms.generationName.toLowerCase()))
-                  ?.engines?.map(engine => (
+                {searchTerms.makeName && searchTerms.modelName && vehicleTree
+                  ?.find(m => m.name.localeCompare(searchTerms.makeName, undefined, { sensitivity: 'base' }) === 0)
+                  ?.models?.find(m => m.name.localeCompare(searchTerms.modelName, undefined, { sensitivity: 'base' }) === 0)
+                  ?.generations?.flatMap(gen => gen.engines || [])
+                  .filter((engine, index, self) => self.findIndex(e => e.engineCode === engine.engineCode) === index)
+                  .map(engine => (
                     <option key={engine.id} value={engine.engineCode} />
                   ))}
               </datalist>
@@ -1018,10 +1082,10 @@ const AdminFitments = () => {
               />
               <datalist id="trim-suggestions">
                 {searchTerms.makeName && searchTerms.modelName && searchTerms.generationName && searchTerms.engineCode && vehicleTree
-                  ?.find(m => m.name.toLowerCase().includes(searchTerms.makeName.toLowerCase()))
-                  ?.models?.find(m => m.name.toLowerCase().includes(searchTerms.modelName.toLowerCase()))
-                  ?.generations?.find(g => g.name.toLowerCase().includes(searchTerms.generationName.toLowerCase()))
-                  ?.engines?.find(e => e.engineCode.toLowerCase().includes(searchTerms.engineCode.toLowerCase()))
+                  ?.find(m => m.name.localeCompare(searchTerms.makeName, undefined, { sensitivity: 'base' }) === 0)
+                  ?.models?.find(m => m.name.localeCompare(searchTerms.modelName, undefined, { sensitivity: 'base' }) === 0)
+                  ?.generations?.find(g => g.name.localeCompare(searchTerms.generationName, undefined, { sensitivity: 'base' }) === 0)
+                  ?.engines?.find(e => e.engineCode.localeCompare(searchTerms.engineCode, undefined, { sensitivity: 'base' }) === 0)
                   ?.trims?.map(trim => (
                     <option key={trim.id} value={trim.name} />
                   ))}

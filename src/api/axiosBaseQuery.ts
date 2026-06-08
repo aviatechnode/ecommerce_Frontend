@@ -11,25 +11,19 @@ import { api } from "./axios";
 
 type AxiosBaseQueryArgs = {
   url: string;
-
   method?: AxiosRequestConfig["method"];
-
   data?: AxiosRequestConfig["data"];
-
   params?: AxiosRequestConfig["params"];
-};
-
-type AxiosBaseQueryError = {
-  status?: number;
-
-  data?: unknown;
 };
 
 export const axiosBaseQuery =
   (): BaseQueryFn<
     AxiosBaseQueryArgs,
     unknown,
-    AxiosBaseQueryError
+    {
+      status?: number;
+      data?: unknown;
+    }
   > =>
   async ({
     url,
@@ -38,27 +32,30 @@ export const axiosBaseQuery =
     params,
   }) => {
     try {
-      const result = await api({
-        url,
-        method,
-        data,
-        params,
-      });
+      const result =
+        await api({
+          url,
+          method,
+          data,
+          params,
+        });
 
       return {
-        data: result.data,
+        data:
+          result.data,
       };
-    } catch (axiosError) {
+    } catch (error) {
       const err =
-        axiosError as AxiosError;
+        error as AxiosError;
 
       return {
         error: {
           status:
-            err.response?.status,
+            err.response?.status ??
+            500,
 
           data:
-            err.response?.data ||
+            err.response?.data ??
             err.message,
         },
       };

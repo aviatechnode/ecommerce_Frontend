@@ -2,7 +2,7 @@ import { createApi } from "@reduxjs/toolkit/query/react";
 import { axiosBaseQuery } from "../api/axiosBaseQuery";
 
 //////////////////////////////////////////////////////////
-// TYPES
+// TYPES (aligned with backend responses)
 //////////////////////////////////////////////////////////
 
 export interface CartItem {
@@ -15,6 +15,9 @@ export interface CartItem {
   variant?: {
     id: string;
     weight?: number | string | null;
+    length?: number | null;
+    width?: number | null;
+    height?: number | null;
 
     product?: {
       id: string;
@@ -32,10 +35,9 @@ export interface CartResponse {
     id: string;
     userId: string;
     items: CartItem[];
-
     deliveryStateId?: string | null;
     deliveryLgaId?: string | null;
-    shippingZoneId?: string | null;
+    // shippingZoneId is NOT stored on cart – removing to match backend
   } | null;
 
   totals: {
@@ -47,15 +49,27 @@ export interface CartResponse {
     shippingMethod?: string;
     deliveryFee?: number;
     estimatedDays?: number;
-    courier?: any;
-    pickupStation?: any;
-    shippingRate?: any;
     zone?: any;
     weight?: number;
+    volumetricWeight?: number;
+    chargeableWeight?: number;
     error?: string;
   } | null;
 
   grandTotal: number;
+}
+
+export interface CalculatedShipping {
+  shippingMethod: string;
+  deliveryFee: number;
+  estimatedDays: number;
+  zone?: {
+    id: string;
+    name?: string;
+  };
+  weight?: number;
+  volumetricWeight?: number;
+  chargeableWeight?: number;
 }
 
 //////////////////////////////////////////////////////////
@@ -73,13 +87,9 @@ function recalcCart(draft: CartResponse) {
     totalItems += item.quantity;
   }
 
-  draft.totals = {
-    subtotal,
-    totalItems,
-  };
+  draft.totals = { subtotal, totalItems };
 
-  draft.grandTotal =
-    subtotal + Number(draft.shipping?.deliveryFee || 0);
+  draft.grandTotal = subtotal + Number(draft.shipping?.deliveryFee || 0);
 }
 
 //////////////////////////////////////////////////////////
@@ -101,7 +111,6 @@ export const cartApi = createApi({
         stateId?: string;
         lgaId?: string;
         shippingMethod?: string;
-        pickupStationId?: string;
       } | void
     >({
       query: (params) => ({
@@ -109,7 +118,6 @@ export const cartApi = createApi({
         method: "GET",
         params,
       }),
-
       providesTags: ["Cart"],
     }),
 
@@ -118,10 +126,7 @@ export const cartApi = createApi({
     //////////////////////////////////////////////////////////
     addToCart: builder.mutation<
       any,
-      {
-        variantId: string;
-        quantity: number;
-      }
+      { variantId: string; quantity: number }
     >({
       query: (data) => ({
         url: "/api/cart/add",
@@ -129,38 +134,29 @@ export const cartApi = createApi({
         data,
       }),
 
-      async onQueryStarted(
-        arg,
-        { dispatch, queryFulfilled }
-      ) {
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
         const patch = dispatch(
-          cartApi.util.updateQueryData(
-            "getCart",
-            undefined,
-            (draft) => {
-              if (!draft?.cart) return;
+          cartApi.util.updateQueryData("getCart", undefined, (draft) => {
+            if (!draft?.cart) return;
 
-              const existingItem =
-                draft.cart.items.find(
-                  (item) =>
-                    item.variantId === arg.variantId
-                );
+            const existing = draft.cart.items.find(
+              (i) => i.variantId === arg.variantId
+            );
 
-              if (existingItem) {
-                existingItem.quantity += arg.quantity;
-              } else {
-                draft.cart.items.push({
-                  id: `temp-${Date.now()}`,
-                  cartId: draft.cart.id,
-                  variantId: arg.variantId,
-                  quantity: arg.quantity,
-                  unitPrice: 0,
-                });
-              }
-
-              recalcCart(draft);
+            if (existing) {
+              existing.quantity += arg.quantity;
+            } else {
+              draft.cart.items.push({
+                id: `temp-${Date.now()}`,
+                cartId: draft.cart.id,
+                variantId: arg.variantId,
+                quantity: arg.quantity,
+                unitPrice: 0,
+              });
             }
-          )
+
+            recalcCart(draft);
+          })
         );
 
         try {
@@ -174,14 +170,11 @@ export const cartApi = createApi({
     }),
 
     //////////////////////////////////////////////////////////
-    // UPDATE ITEM
+    // UPDATE ITEM QUANTITY (cartItemId)
     //////////////////////////////////////////////////////////
     updateCartItem: builder.mutation<
       any,
-      {
-        id: string;
-        quantity: number;
-      }
+      { id: string; quantity: number }
     >({
       query: ({ id, quantity }) => ({
         url: `/api/cart/item/${id}`,
@@ -189,27 +182,18 @@ export const cartApi = createApi({
         data: { quantity },
       }),
 
-      async onQueryStarted(
-        arg,
-        { dispatch, queryFulfilled }
-      ) {
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
         const patch = dispatch(
-          cartApi.util.updateQueryData(
-            "getCart",
-            undefined,
-            (draft) => {
-              const item =
-                draft?.cart?.items?.find(
-                  (i) => i.id === arg.id
-                );
+          cartApi.util.updateQueryData("getCart", undefined, (draft) => {
+            const item = draft?.cart?.items?.find(
+              (i) => i.id === arg.id
+            );
 
-              if (!item) return;
+            if (!item) return;
 
-              item.quantity = arg.quantity;
-
-              recalcCart(draft);
-            }
-          )
+            item.quantity = arg.quantity;
+            recalcCart(draft);
+          })
         );
 
         try {
@@ -223,40 +207,30 @@ export const cartApi = createApi({
     }),
 
     //////////////////////////////////////////////////////////
-    // REMOVE ITEM
+    // REMOVE ITEM (by variantId, matches backend)
     //////////////////////////////////////////////////////////
     removeCartItem: builder.mutation<
       any,
-      {
-        variantId: string;
-      }
+      { variantId: string }
     >({
       query: (data) => ({
         url: "/api/cart/item",
         method: "DELETE",
-        data,
+        data, // sends { variantId: "..." }
       }),
 
-      async onQueryStarted(
-        arg,
-        { dispatch, queryFulfilled }
-      ) {
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
         const patch = dispatch(
-          cartApi.util.updateQueryData(
-            "getCart",
-            undefined,
-            (draft) => {
-              if (!draft?.cart) return;
+          cartApi.util.updateQueryData("getCart", undefined, (draft) => {
+            if (!draft?.cart) return;
 
-              draft.cart.items =
-                draft.cart.items.filter(
-                  (item) =>
-                    item.variantId !== arg.variantId
-                );
+            // Filter out by variantId, not cart item id
+            draft.cart.items = draft.cart.items.filter(
+              (item) => item.variantId !== arg.variantId
+            );
 
-              recalcCart(draft);
-            }
-          )
+            recalcCart(draft);
+          })
         );
 
         try {
@@ -279,29 +253,16 @@ export const cartApi = createApi({
         data: {},
       }),
 
-      async onQueryStarted(
-        _,
-        { dispatch, queryFulfilled }
-      ) {
+      async onQueryStarted(_, { dispatch, queryFulfilled }) {
         const patch = dispatch(
-          cartApi.util.updateQueryData(
-            "getCart",
-            undefined,
-            (draft) => {
-              if (!draft?.cart) return;
+          cartApi.util.updateQueryData("getCart", undefined, (draft) => {
+            if (!draft?.cart) return;
 
-              draft.cart.items = [];
-
-              draft.totals = {
-                subtotal: 0,
-                totalItems: 0,
-              };
-
-              draft.shipping = null;
-
-              draft.grandTotal = 0;
-            }
-          )
+            draft.cart.items = [];
+            draft.totals = { subtotal: 0, totalItems: 0 };
+            draft.shipping = null;
+            draft.grandTotal = 0;
+          })
         );
 
         try {
@@ -315,14 +276,13 @@ export const cartApi = createApi({
     }),
 
     //////////////////////////////////////////////////////////
-    // UPDATE DELIVERY
+    // UPDATE DELIVERY INFO
     //////////////////////////////////////////////////////////
     updateCartDelivery: builder.mutation<
       any,
       {
         deliveryStateId?: string;
         deliveryLgaId?: string;
-        shippingZoneId?: string;
       }
     >({
       query: (data) => ({
@@ -331,39 +291,17 @@ export const cartApi = createApi({
         data,
       }),
 
-      async onQueryStarted(
-        arg,
-        { dispatch, queryFulfilled }
-      ) {
+      async onQueryStarted(arg, { dispatch, queryFulfilled }) {
         const patch = dispatch(
-          cartApi.util.updateQueryData(
-            "getCart",
-            undefined,
-            (draft) => {
-              if (!draft?.cart) return;
+          cartApi.util.updateQueryData("getCart", undefined, (draft) => {
+            if (!draft?.cart) return;
 
-              if (
-                arg.deliveryStateId !== undefined
-              ) {
-                draft.cart.deliveryStateId =
-                  arg.deliveryStateId;
-              }
+            if (arg.deliveryStateId !== undefined)
+              draft.cart.deliveryStateId = arg.deliveryStateId;
 
-              if (
-                arg.deliveryLgaId !== undefined
-              ) {
-                draft.cart.deliveryLgaId =
-                  arg.deliveryLgaId;
-              }
-
-              if (
-                arg.shippingZoneId !== undefined
-              ) {
-                draft.cart.shippingZoneId =
-                  arg.shippingZoneId;
-              }
-            }
-          )
+            if (arg.deliveryLgaId !== undefined)
+              draft.cart.deliveryLgaId = arg.deliveryLgaId;
+          })
         );
 
         try {
@@ -380,16 +318,7 @@ export const cartApi = createApi({
     // CALCULATE SHIPPING
     //////////////////////////////////////////////////////////
     calculateCartShipping: builder.mutation<
-      {
-        shippingMethod: string;
-        deliveryFee: number;
-        estimatedDays: number;
-        courier?: any;
-        pickupStation?: any;
-        shippingRate?: any;
-        zone?: any;
-        weight?: number;
-      },
+      CalculatedShipping,
       {
         deliveryStateId: string;
         deliveryLgaId: string;
@@ -403,15 +332,12 @@ export const cartApi = createApi({
     }),
 
     //////////////////////////////////////////////////////////
-    // MERGE CART
+    // MERGE GUEST CART
     //////////////////////////////////////////////////////////
     mergeCart: builder.mutation<
       any,
       {
-        items: Array<{
-          variantId: string;
-          quantity: number;
-        }>;
+        items: { variantId: string; quantity: number }[];
       }
     >({
       query: (data) => ({
@@ -419,7 +345,6 @@ export const cartApi = createApi({
         method: "POST",
         data,
       }),
-
       invalidatesTags: ["Cart"],
     }),
   }),

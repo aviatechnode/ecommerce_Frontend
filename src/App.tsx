@@ -1,10 +1,11 @@
-import "./index.css";
 import { Routes, Route } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import AuthPage from "./components/Auth";
 import GoogleCallback from "./pages/GoogleCallback";
-import VerifyEmail from "./pages/VerifyEmail";
+import VerifyEmail from "./components/Auth/VerifyEmail";
+import ForgotPasswordPage from "./components/Auth/ForgotPassword";
+import ResetPasswordPage from "./components/Auth/ResetPassword";
 
 import RoleProtectedRoute from "./components/RoleProtectedRoute";
 
@@ -20,146 +21,115 @@ import AdminWarehouses from "./admin/components/AdminWarehouses";
 import AdminCoupons from "./admin/components/AdminCoupons";
 import AdminAuditLogs from "./admin/components/AdminAuditLogs";
 import AdminFitments from "./admin/components/AdminFitment";
-
-import AdminShippingRates from "./admin/components/AdminShippingRates";
 import AdminCouriers from "./admin/components/AdminCouriers";
-
-/* ================= LOGISTICS ================= */
-// import AdminShipments from "./admin/components/AdminShipments";
-// import AdminShipmentTracking from "./admin/components/AdminShipmentTracking";
-// import AdminShipmentEvents from "./admin/components/AdminShipmentEvents";
-// import AdminShippingZones from "./admin/components/AdminShippingZones";
-// import AdminPickupStations from "./admin/components/AdminPickupStations";
+import AdminPickupStations from "./admin/components/AdminPickupStations";
+import AdminShipments from "./admin/components/AdminShipments";
+import AdminProducts from "./admin/components/AdminProducts";
 
 import Home from "./client/pages/Home";
 import ClientLayout from "./client/layouts/ClientLayout";
-
-import { useAuthStore } from "./store/AuthStore";
 
 import Cart from "./client/pages/Cart";
 import ProductDetails from "./client/pages/ProductDetails";
 import WishlistPage from "./client/pages/WishlistPage";
 import CheckoutPage from "./client/pages/Checkout";
-
 import Feedback from "./client/components/Feedback";
-import AdminShippingZones from "./admin/components/AdminShippingZones";
-import AdminPickupStations from "./admin/components/AdminPickupStations";
-import AdminShipments from "./admin/components/AdminShipments";
 import AboutPage from "./client/pages/About-us";
-import AdminProducts from "./admin/components/AdminProducts";
 import CustomerProfilePage from "./client/pages/Profile";
+import { GlobalChatButton } from "./client/pages/GlobalChatButton";
+
+import { bootstrapAuth } from "./api/session";
+import { useAppDispatch } from "./admin/store/store";
+import { useMeQuery } from "./services/authApi";
+import ShippingRatesManager from "./admin/components/AdminShippingRates";
+import ShippingZonesManager from "./admin/components/AdminShippingZones";
 
 function App() {
-  const initAuth = useAuthStore((s) => s.initAuth);
-  const hydrated = useAuthStore((s) => s.hydrated);
-  const loading = useAuthStore((s) => s.loading);
+  const dispatch = useAppDispatch();
+  const [bootstrapped, setBootstrapped] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+
+  const { data: meData } = useMeQuery(undefined, {
+    skip: !authReady,
+  });
 
   useEffect(() => {
-    initAuth();
-  }, [initAuth]);
+    const run = async () => {
+      try {
+        await bootstrapAuth(dispatch);
+      } catch (e) {
+        // ignore refresh failure silently
+      } finally {
+        setBootstrapped(true);
+        setAuthReady(true);
+      }
+    };
 
-  if (!hydrated || loading) return null;
+    run();
+  }, [dispatch]);
+
+  if (!bootstrapped) return null;
 
   return (
-    <Routes>
-      {/* ================= CLIENT ================= */}
-      <Route element={<ClientLayout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="cart" element={<Cart />} />
-        <Route path="product/:id" element={<ProductDetails />} />
-        <Route path="wishlist" element={<WishlistPage />} />
-        <Route path="checkout" element={<CheckoutPage />} />
-        <Route path="feedback" element={<Feedback />} />
-        <Route path="about" element={<AboutPage />} />
-        <Route path="profile" element={<CustomerProfilePage />} />
+    <>
+      <Routes>
+        {/* CLIENT */}
+        <Route element={<ClientLayout />}>
+          <Route path="/" element={<Home />} />
+          <Route path="cart" element={<Cart />} />
+          <Route path="product/:id" element={<ProductDetails />} />
+          <Route path="wishlist" element={<WishlistPage />} />
+          <Route path="checkout" element={<CheckoutPage />} />
+          <Route path="feedback" element={<Feedback />} />
+          <Route path="about" element={<AboutPage />} />
+          <Route path="profile" element={<CustomerProfilePage />} />
+        </Route>
 
-      </Route>
-
-      {/* ================= AUTH ================= */}
-      <Route path="/auth" element={<AuthPage />} />
-      <Route path="/auth/google/callback" element={<GoogleCallback />} />
-      <Route path="/verify-email/:token" element={<VerifyEmail />} />
-
-      {/* ================= ADMIN ================= */}
-      <Route
-        path="/admin"
-        element={
-          <RoleProtectedRoute allowedRoles={["ADMIN", "SUPER_ADMIN"]}>
-            <AdminLayout />
-          </RoleProtectedRoute>
-        }
-      >
-        {/* ================= DASHBOARD ================= */}
-        <Route index element={<AdminDashboard />} />
-
-        {/* ================= CATALOG ================= */}
-        <Route path="products" element={<AdminProducts />} />
-        <Route path="categories" element={<AdminCategories />} />
-        <Route path="brands" element={<AdminBrands />} />
-        <Route path="fitments" element={<AdminFitments />} />
-
-        {/* ================= ORDERS ================= */}
-        <Route path="orders" element={<AdminOrders />} />
-
-        {/* ================= USERS & ROLES ================= */}
-        <Route path="users" element={<AdminUsers />} />
-        <Route path="roles" element={<AdminRoles />} />
-
-        {/* ================= INVENTORY ================= */}
-        <Route path="warehouses" element={<AdminWarehouses />} />
-
-        {/* ================= MARKETING ================= */}
-        <Route path="coupons" element={<AdminCoupons />} />
-
-        {/* ================= SYSTEM ================= */}
-        <Route path="audit-logs" element={<AdminAuditLogs />} />
-
-        {/* ================= LOGISTICS ================= */}
-
-        {/* Shipments */}
+        {/* AUTH */}
+        <Route path="/auth" element={<AuthPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
         <Route
-          path="logistics/shipments"
-          element={<AdminShipments />}
-        />
+  path="/oauth-success"
+  element={<GoogleCallback />}
+/>
+        <Route path="/verify-email/:token" element={<VerifyEmail />} />
 
-        {/* Tracking */}
-        {/* <Route
-          path="logistics/shipments/tracking"
-          element={<AdminShipmentTracking />}
-        /> */}
-
-        {/* Shipment Events */}
-        {/* <Route
-          path="logistics/shipments/events"
-          element={<AdminShipmentEvents />}
-        /> */}
-
-        {/* Couriers */}
+        {/* ADMIN */}
         <Route
-          path="logistics/couriers"
-          element={<AdminCouriers />}
-        />
+          path="/admin"
+          element={
+            <RoleProtectedRoute allowedRoles={["ADMIN", "SUPER_ADMIN"]}>
+              <AdminLayout />
+            </RoleProtectedRoute>
+          }
+        >
+          <Route index element={<AdminDashboard />} />
+          <Route path="products" element={<AdminProducts />} />
+          <Route path="categories" element={<AdminCategories />} />
+          <Route path="brands" element={<AdminBrands />} />
+          <Route path="fitments" element={<AdminFitments />} />
+          <Route path="orders" element={<AdminOrders />} />
+          <Route path="users" element={<AdminUsers />} />
+          <Route path="roles" element={<AdminRoles />} />
+          <Route path="warehouses" element={<AdminWarehouses />} />
+          <Route path="coupons" element={<AdminCoupons />} />
+          <Route path="audit-logs" element={<AdminAuditLogs />} />
+          <Route path="logistics/shipments" element={<AdminShipments />} />
+          <Route path="logistics/couriers" element={<AdminCouriers />} />
+          <Route path="logistics/zones" element={<ShippingZonesManager />} />
+          <Route path="logistics/rates" element={<ShippingRatesManager />} />
+          <Route path="logistics/stations" element={<AdminPickupStations />} />
+        </Route>
+      </Routes>
 
-        {/* Shipping Zones */}
-        <Route
-          path="logistics/zones"
-          element={<AdminShippingZones />}
-        />
-
-        {/* Shipping Rates */}
-        <Route
-          path="logistics/rates"
-          element={<AdminShippingRates />}
-        />
-
-        {/* Pickup Stations */}
-        <Route
-          path="logistics/stations"
-          element={<AdminPickupStations />}
-        />
-      </Route>
-    </Routes>
+      <AuthGate user={meData?.user} />
+    </>
   );
+}
+
+function AuthGate({ user }: { user?: any }) {
+  return user ? <GlobalChatButton /> : null;
 }
 
 export default App;

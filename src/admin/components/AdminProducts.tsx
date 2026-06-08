@@ -42,6 +42,7 @@ import StepSpecifications from "../steps/StepSpecifications";
 import StepInventory from "../steps/StepInventory";
 import StepMedia from "../steps/StepMedia";
 import StepReview from "../steps/StepReview";
+import StepFitments from "../steps/StepFitments";
 
 /* =========================================================
 CONSTANTS
@@ -370,18 +371,24 @@ export default function AdminProducts() {
                 />
               )}
               {step === 4 && (
-                <StepInventory
+                <StepFitments
                   nextStep={() => dispatch(nextStep())}
                   prevStep={() => dispatch(prevStep())}
                 />
               )}
               {step === 5 && (
-                <StepMedia
+                <StepInventory
                   nextStep={() => dispatch(nextStep())}
                   prevStep={() => dispatch(prevStep())}
                 />
               )}
               {step === 6 && (
+                <StepMedia
+                  nextStep={() => dispatch(nextStep())}
+                  prevStep={() => dispatch(prevStep())}
+                />
+              )}
+              {step === 7 && (
                 <StepReview
                   prevStep={() => dispatch(prevStep())}
                   onSave={save}

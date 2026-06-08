@@ -13,13 +13,13 @@ const stepSlice = createSlice({
   initialState,
   reducers: {
     nextStep: (state) => {
-      state.value = Math.min(6, state.value + 1);
+      state.value = Math.min(7, state.value + 1);
     },
     prevStep: (state) => {
       state.value = Math.max(1, state.value - 1);
     },
     goToStep: (state, action: PayloadAction<number>) => {
-      state.value = Math.min(6, Math.max(1, action.payload));
+      state.value = Math.min(7, Math.max(1, action.payload));
     },
     resetStep: (state) => {
       state.value = 1;

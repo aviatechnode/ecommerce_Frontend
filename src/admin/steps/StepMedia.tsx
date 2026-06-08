@@ -7,7 +7,7 @@ import {
 } from "react-hook-form";
 
 import type { ProductFormValues } from "../../types/product.form.types";
-import type { ProductMedia } from "../../schemas/product.schema";
+import type { Media } from "../../schemas/product.schema";
 
 
 /* =========================================================
@@ -73,7 +73,7 @@ function StepMedia({
           throw new Error("Invalid response from Cloudinary");
         }
 
-        const media: ProductMedia = {
+        const media: Media = {
           url: data.secure_url,
           type: file.type.startsWith("video") ? "VIDEO" : "IMAGE",
           position: startPosition + idx, // guaranteed unique per product

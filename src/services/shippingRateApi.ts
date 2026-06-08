@@ -1,184 +1,266 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { axiosBaseQuery } from "../api/axiosBaseQuery";
 
-// TYPES
+export const DeliveryMethod = {
+  STANDARD: "STANDARD",
+  EXPRESS: "EXPRESS",
+  SAME_DAY: "SAME_DAY",
+  PICKUP: "PICKUP",
+} as const;
+
+export type DeliveryMethod =(typeof DeliveryMethod)[keyof typeof DeliveryMethod];
+
+/* =========================================================
+TYPES
+========================================================= */
+
 export interface ShippingRate {
   id: string;
-  courierId: string;
   zoneId: string;
+
   name: string;
+  deliveryMethod: DeliveryMethod;
 
-  minWeight: number;
-  maxWeight: number;
+  baseFee: string;
+  currency: string;
 
-  baseFee: number;
-  perKgFee: number;
+  minWeight?: number | null;
+  maxWeight?: number | null;
+  weightFee?: string | null;
 
-  volumetricDivisor: number;
-  insurancePercent: number;
+  minDistanceKm?: number | null;
+  maxDistanceKm?: number | null;
+  distanceFeeKm?: string | null;
+
+  minOrderValue?: string | null;
+  maxOrderValue?: string | null;
+
+  estimatedDaysMin?: number | null;
+  estimatedDaysMax?: number | null;
+
   priority: number;
-
-  fixedFee?: number | null;
-  remoteAreaSurcharge?: number | null;
-
-  supportsCOD: boolean;
   isActive: boolean;
 
   createdAt: string;
   updatedAt: string;
-
-  courier?: {
-    id: string;
-    name: string;
-  };
-
-  zone?: {
-    id: string;
-    name: string;
-  };
 }
 
-export interface ApiResponse<T> {
-  success: boolean;
-  message?: string;
-  data: T;
+export interface ShippingFeeResult {
+  fee: number;
+  currency: string;
+  rate: ShippingRate;
 }
 
-// PAYLOADS
-export interface CreateShippingRatePayload {
-  courierId: string;
+export interface CreateShippingRateDto {
   zoneId: string;
-  name: string;
 
-  minWeight: number;
-  maxWeight: number;
+  name: string;
+  deliveryMethod: DeliveryMethod;
 
   baseFee: number;
-  perKgFee: number;
+  currency?: string;
 
-  volumetricDivisor: number;
-  insurancePercent: number;
-  priority: number;
+  minWeight?: number;
+  maxWeight?: number;
+  weightFee?: number;
 
-  fixedFee?: number | null;
-  remoteAreaSurcharge?: number | null;
+  minDistanceKm?: number;
+  maxDistanceKm?: number;
+  distanceFeeKm?: number;
 
-  supportsCOD?: boolean;
-  isActive?: boolean;
+  minOrderValue?: number;
+  maxOrderValue?: number;
+
+  estimatedDaysMin?: number;
+  estimatedDaysMax?: number;
+
+  priority?: number;
 }
 
-export interface UpdateShippingRatePayload
-  extends Partial<CreateShippingRatePayload> {}
-
-export interface FindBestRatePayload {
-  courierId: string;
+export interface CalculateShippingRateDto {
   zoneId: string;
-  weight: number;
+
+  deliveryMethod?: DeliveryMethod;
+
+  weight?: number;
+  distanceKm?: number;
+  orderValue?: number;
 }
 
-// API
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
+/* =========================================================
+API
+========================================================= */
+
 export const shippingRateApi = createApi({
   reducerPath: "shippingRateApi",
+
   baseQuery: axiosBaseQuery(),
-  tagTypes: ["ShippingRate"] as const,
+
+  tagTypes: ["ShippingRate"],
 
   endpoints: (builder) => ({
-    createShippingRate: builder.mutation<
-      ApiResponse<ShippingRate>,
-      CreateShippingRatePayload
+    /* ============================
+       GET ZONE RATES
+    ============================ */
+    getZoneRates: builder.query<
+      ShippingRate[],
+      string
     >({
-      query: (data) => ({
-        url: "/api/shipping-rates",
+      query: (zoneId) => ({
+        url: `/api/shipping/zones/${zoneId}/rates`,
+        method: "GET",
+      }),
+
+      transformResponse: (
+        response: ApiResponse<ShippingRate[]>
+      ) => response.data,
+
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((rate) => ({
+                type: "ShippingRate" as const,
+                id: rate.id,
+              })),
+              {
+                type: "ShippingRate",
+                id: "LIST",
+              },
+            ]
+          : [
+              {
+                type: "ShippingRate",
+                id: "LIST",
+              },
+            ],
+    }),
+
+    /* ============================
+       CALCULATE BEST RATE
+    ============================ */
+    calculateShippingRate: builder.mutation<
+      ShippingFeeResult,
+      CalculateShippingRateDto
+    >({
+      query: (body) => ({
+        url: "/api/shipping/rates/calculate",
         method: "POST",
-        data,
+        data: body,
       }),
-      invalidatesTags: ["ShippingRate"],
+
+      transformResponse: (
+        response: ApiResponse<ShippingFeeResult>
+      ) => response.data,
     }),
 
-    getShippingRates: builder.query<
-      ApiResponse<ShippingRate[]>,
-      void
+    /* ============================
+       CREATE RATE
+    ============================ */
+    createShippingRate: builder.mutation<
+      ShippingRate,
+      CreateShippingRateDto
     >({
-      query: () => ({
-        url: "/api/shipping-rates",
-        method: "GET",
+      query: (body) => ({
+        url: "/api/shipping/rates",
+        method: "POST",
+        data: body,
       }),
-      providesTags: ["ShippingRate"],
-    }),
 
-    getShippingRateById: builder.query<
-      ApiResponse<ShippingRate>,
-      string
-    >({
-      query: (id) => ({
-        url: `/api/shipping-rates/${id}`,
-        method: "GET",
-      }),
-      providesTags: (_result, _error, id) => [
-        { type: "ShippingRate", id },
+      transformResponse: (
+        response: ApiResponse<ShippingRate>
+      ) => response.data,
+
+      invalidatesTags: [
+        {
+          type: "ShippingRate",
+          id: "LIST",
+        },
       ],
     }),
 
-    updateShippingRate: builder.mutation<
-      ApiResponse<ShippingRate>,
-      { id: string; data: UpdateShippingRatePayload }
-    >({
-      query: ({ id, data }) => ({
-        url: `/api/shipping-rates/${id}`,
-        method: "PATCH",
-        data,
-      }),
-      invalidatesTags: (_result, _error, { id }) => [
-        "ShippingRate",
-        { type: "ShippingRate", id },
-      ],
-    }),
-
+    /* ============================
+       TOGGLE RATE
+    ============================ */
     toggleShippingRate: builder.mutation<
-      ApiResponse<ShippingRate>,
-      string
+      ShippingRate,
+      {
+        id: string;
+        isActive: boolean;
+      }
     >({
-      query: (id) => ({
-        url: `/api/shipping-rates/${id}/toggle-active`,
+      query: ({ id, isActive }) => ({
+        url: `/api/shipping/rates/${id}/toggle`,
         method: "PATCH",
+        data: {
+          isActive,
+        },
       }),
-      invalidatesTags: (_result, _error, id) => [
-        "ShippingRate",
-        { type: "ShippingRate", id },
+
+      transformResponse: (
+        response: ApiResponse<ShippingRate>
+      ) => response.data,
+
+      invalidatesTags: (_, __, arg) => [
+        {
+          type: "ShippingRate",
+          id: arg.id,
+        },
+        {
+          type: "ShippingRate",
+          id: "LIST",
+        },
       ],
     }),
 
+    /* ============================
+       DELETE RATE
+    ============================ */
     deleteShippingRate: builder.mutation<
-      ApiResponse<null>,
+      {
+        success: boolean;
+        message: string;
+      },
       string
     >({
       query: (id) => ({
-        url: `/api/shipping-rates/${id}`,
+        url: `/api/shipping/rates/${id}`,
         method: "DELETE",
       }),
-      invalidatesTags: ["ShippingRate"],
-    }),
 
-    findBestShippingRate: builder.mutation<
-      ApiResponse<ShippingRate>,
-      FindBestRatePayload
-    >({
-      query: (data) => ({
-        url: "/api/shipping-rates/find-best-rate",
-        method: "POST",
-        data,
-      }),
+      transformResponse: (
+        response: {
+          success: boolean;
+          message: string;
+        }
+      ) => response,
+
+      invalidatesTags: [
+        {
+          type: "ShippingRate",
+          id: "LIST",
+        },
+      ],
     }),
   }),
 });
 
-// HOOKS
+/* =========================================================
+HOOKS
+========================================================= */
+
 export const {
+  useGetZoneRatesQuery,
+
+  useCalculateShippingRateMutation,
+
   useCreateShippingRateMutation,
-  useGetShippingRatesQuery,
-  useGetShippingRateByIdQuery,
-  useUpdateShippingRateMutation,
+
   useToggleShippingRateMutation,
   useDeleteShippingRateMutation,
-  useFindBestShippingRateMutation,
 } = shippingRateApi;

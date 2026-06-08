@@ -1,50 +1,106 @@
 import { useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { useAuthStore } from "../store/AuthStore";
+import {
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
+
+import { useLazyMeQuery } from "../services/authApi";
+import { setCsrfToken } from "../lib/csrf";
 
 export default function GoogleCallback() {
-  const [params] = useSearchParams();
-  const navigate = useNavigate();
-  const { signinWithGoogle } = useAuthStore();
+  const navigate =
+    useNavigate();
+
+  const [params] =
+    useSearchParams();
+
+  const [getMe] =
+    useLazyMeQuery();
 
   useEffect(() => {
     const run = async () => {
-      const token = params.get("token");
-
-      if (!token) {
-        navigate("/auth", { replace: true });
-        return;
-      }
-
       try {
-        await signinWithGoogle(token);
+        const accessToken =
+          params.get(
+            "accessToken"
+          );
 
-        // ✅ Get updated user AFTER login
-        const user = useAuthStore.getState().user;
+        const csrfToken =
+          params.get(
+            "csrfToken"
+          );
 
-        if (!user) {
-          navigate("/auth", { replace: true });
+        if (!accessToken) {
+          navigate("/auth", {
+            replace: true,
+          });
+
           return;
         }
 
-        // ✅ Redirect based on role
-        if (user.roleName === "ADMIN" || user.roleName === "SUPER_ADMIN") {
-          navigate("/admin", { replace: true });
-        } else {
-          navigate("/", { replace: true });
+        /////////////////////////////////////
+        // Store Tokens
+        /////////////////////////////////////
+
+        sessionStorage.setItem(
+          "accessToken",
+          accessToken
+        );
+
+        if (csrfToken) {
+          setCsrfToken(
+            csrfToken
+          );
         }
-      } catch (err) {
-        console.error("Google callback error:", err);
-        navigate("/auth", { replace: true });
+
+        /////////////////////////////////////
+        // Verify Session
+        /////////////////////////////////////
+
+        const result =
+          await getMe().unwrap();
+
+        if (!result?.user) {
+          navigate("/auth", {
+            replace: true,
+          });
+
+          return;
+        }
+
+        /////////////////////////////////////
+        // ALWAYS GO HOME
+        /////////////////////////////////////
+
+        navigate("/", {
+          replace: true,
+        });
+      } catch (error) {
+        console.error(
+          "Google callback error:",
+          error
+        );
+
+        sessionStorage.removeItem(
+          "accessToken"
+        );
+
+        navigate("/auth", {
+          replace: true,
+        });
       }
     };
 
     run();
-  }, [params, navigate, signinWithGoogle]);
+  }, [
+    params,
+    navigate,
+    getMe,
+  ]);
 
   return (
     <div className="text-center mt-20">
-      Signing you in with Google...
+      Signing you in...
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { Navigate } from "react-router-dom";
-import { useAuthStore } from "../store/AuthStore";
+import { useMeQuery } from "../services/authApi";
 import type { JSX } from "react";
 
 interface Props {
@@ -13,30 +13,41 @@ export default function RoleProtectedRoute({
   allowedRoles,
   requiredPermissions,
 }: Props) {
-  const { user, hydrated, hasPermission } = useAuthStore();
+  const { data, isLoading } = useMeQuery();
 
-  // 🔥 wait until auth state is fully resolved
-  if (!hydrated) return null;
+  const user = data?.user;
 
-  // 🔥 only redirect AFTER hydration completes
+  // 🔥 wait until auth state is resolved from server
+  if (isLoading) return null;
+
+  // 🔥 not authenticated → redirect
   if (!user) {
     return <Navigate to="/auth" replace />;
   }
 
-  // 🔥 super admin override (clean + reliable)
-  if (user.isSuperAdmin) {
+  // 🔥 SUPER ADMIN OVERRIDE (always allowed)
+  const isSuperAdmin = user.roleName === "SUPER_ADMIN";
+
+  if (isSuperAdmin) {
     return children;
   }
 
-  // 🔥 role check
-  if (allowedRoles && !allowedRoles.includes(user.roleName)) {
+  // 🔥 ROLE CHECK
+  if (
+    allowedRoles &&
+    allowedRoles.length > 0 &&
+    !allowedRoles.includes(user.roleName)
+  ) {
     return <Navigate to="/unauthorized" replace />;
   }
 
-  // 🔥 permission check
+  // 🔥 PERMISSION CHECK
   if (
     requiredPermissions &&
-    !requiredPermissions.every((p) => hasPermission(p))
+    requiredPermissions.length > 0 &&
+    !requiredPermissions.every((p) =>
+      user.permissions.includes(p)
+    )
   ) {
     return <Navigate to="/unauthorized" replace />;
   }

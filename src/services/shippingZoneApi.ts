@@ -1,52 +1,115 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
-
 import { axiosBaseQuery } from "../api/axiosBaseQuery";
 
-import type {
-  ShippingZone,
-  ShippingZoneState,
-  ShippingZoneLGA,
+/* =========================================================
+TYPES
+========================================================= */
 
-  CreateShippingZoneInput,
-  UpdateShippingZoneInput,
+export interface State {
+  id: string;
+  name: string;
+}
 
-  CreateShippingZoneStateInput,
-  UpdateShippingZoneStateInput,
+export interface LGA {
+  id: string;
+  name: string;
+  stateId: string;
+}
 
-  CreateShippingZoneLGAInput,
-  UpdateShippingZoneLGAInput,
-} from "../types/shipping-zone.types";
+export interface ShippingRate {
+  id: string;
+  zoneId: string;
+  name: string;
+  deliveryMethod: string;
+
+  baseFee: string;
+  currency: string;
+
+  minWeight?: number | null;
+  maxWeight?: number | null;
+  weightFee?: string | null;
+
+  minDistanceKm?: number | null;
+  maxDistanceKm?: number | null;
+  distanceFeeKm?: string | null;
+
+  minOrderValue?: string | null;
+  maxOrderValue?: string | null;
+
+  estimatedDaysMin?: number | null;
+  estimatedDaysMax?: number | null;
+
+  priority: number;
+  isActive: boolean;
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ShippingZone {
+  id: string;
+  name: string;
+  isActive: boolean;
+
+  states: State[];
+  lgas: LGA[];
+
+  rates?: ShippingRate[];
+
+  createdAt: string;
+  updatedAt: string;
+}
+
+/* =========================================================
+REQUEST DTOs
+========================================================= */
+
+export interface CreateShippingZoneDto {
+  name: string;
+  stateIds?: string[];
+  lgaIds?: string[];
+}
+
+export interface UpdateShippingZoneDto {
+  name?: string;
+  stateIds?: string[];
+  lgaIds?: string[];
+  isActive?: boolean;
+}
+
+export interface ToggleZoneStatusDto {
+  isActive: boolean;
+}
+
+/* =========================================================
+RESPONSE TYPES
+========================================================= */
+
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+}
+
+interface ApiMessageResponse {
+  success: boolean;
+  message: string;
+}
+
+/* =========================================================
+API
+========================================================= */
 
 export const shippingZoneApi = createApi({
   reducerPath: "shippingZoneApi",
 
   baseQuery: axiosBaseQuery(),
 
-  tagTypes: [
-    "ShippingZone",
-    "ShippingZoneState",
-    "ShippingZoneLGA",
-  ],
+  tagTypes: ["ShippingZone"],
 
   endpoints: (builder) => ({
-    /* =========================================================
-       SHIPPING ZONES
-    ========================================================= */
+    /* ================= GET ALL ================= */
 
-    createZone: builder.mutation<
-      ShippingZone,
-      CreateShippingZoneInput
-    >({
-      query: (data) => ({
-        url: "/api/shipping-zones",
-        method: "POST",
-        data,
-      }),
-
-      invalidatesTags: ["ShippingZone"],
-    }),
-
-    getAllZones: builder.query<
+    getShippingZones: builder.query<
       ShippingZone[],
       void
     >({
@@ -55,22 +118,33 @@ export const shippingZoneApi = createApi({
         method: "GET",
       }),
 
-      providesTags: ["ShippingZone"],
+      transformResponse: (
+        response: ApiResponse<ShippingZone[]>
+      ) => response.data,
+
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((zone) => ({
+                type: "ShippingZone" as const,
+                id: zone.id,
+              })),
+              {
+                type: "ShippingZone",
+                id: "LIST",
+              },
+            ]
+          : [
+              {
+                type: "ShippingZone",
+                id: "LIST",
+              },
+            ],
     }),
 
-    getActiveZones: builder.query<
-      ShippingZone[],
-      void
-    >({
-      query: () => ({
-        url: "/api/shipping-zones/active",
-        method: "GET",
-      }),
+    /* ================= GET BY ID ================= */
 
-      providesTags: ["ShippingZone"],
-    }),
-
-    getZoneById: builder.query<
+    getShippingZoneById: builder.query<
       ShippingZone,
       string
     >({
@@ -79,7 +153,11 @@ export const shippingZoneApi = createApi({
         method: "GET",
       }),
 
-      providesTags: (_r, _e, id) => [
+      transformResponse: (
+        response: ApiResponse<ShippingZone>
+      ) => response.data,
+
+      providesTags: (_, __, id) => [
         {
           type: "ShippingZone",
           id,
@@ -87,48 +165,101 @@ export const shippingZoneApi = createApi({
       ],
     }),
 
-    updateZone: builder.mutation<
+    /* ================= CREATE ================= */
+
+    createShippingZone: builder.mutation<
+      ShippingZone,
+      CreateShippingZoneDto
+    >({
+      query: (body) => ({
+        url: "/api/shipping-zones",
+        method: "POST",
+        data: body,
+      }),
+
+      transformResponse: (
+        response: ApiResponse<ShippingZone>
+      ) => response.data,
+
+      invalidatesTags: [
+        {
+          type: "ShippingZone",
+          id: "LIST",
+        },
+      ],
+    }),
+
+    /* ================= UPDATE ================= */
+
+    updateShippingZone: builder.mutation<
       ShippingZone,
       {
         id: string;
-        data: UpdateShippingZoneInput;
+        data: UpdateShippingZoneDto;
       }
     >({
       query: ({ id, data }) => ({
         url: `/api/shipping-zones/${id}`,
-        method: "PUT",
-        data,
-      }),
-
-      invalidatesTags: (_r, _e, { id }) => [
-        {
-          type: "ShippingZone",
-          id,
-        },
-        "ShippingZone",
-      ],
-    }),
-
-    toggleZoneStatus: builder.mutation<
-      ShippingZone,
-      string
-    >({
-      query: (id) => ({
-        url: `/api/shipping-zones/${id}/toggle`,
         method: "PATCH",
+        data,
       }),
 
-      invalidatesTags: (_r, _e, id) => [
+      transformResponse: (
+        response: ApiResponse<ShippingZone>
+      ) => response.data,
+
+      invalidatesTags: (_, __, { id }) => [
         {
           type: "ShippingZone",
           id,
         },
-        "ShippingZone",
+        {
+          type: "ShippingZone",
+          id: "LIST",
+        },
       ],
     }),
 
-    deleteZone: builder.mutation<
-      { message: string },
+    /* ================= TOGGLE STATUS ================= */
+
+    toggleShippingZoneStatus: builder.mutation<
+      ShippingZone,
+      {
+        id: string;
+        isActive: boolean;
+      }
+    >({
+      query: ({
+        id,
+        isActive,
+      }) => ({
+        url: `/api/shipping-zones/${id}/status`,
+        method: "PATCH",
+        data: {
+          isActive,
+        },
+      }),
+
+      transformResponse: (
+        response: ApiResponse<ShippingZone>
+      ) => response.data,
+
+      invalidatesTags: (_, __, { id }) => [
+        {
+          type: "ShippingZone",
+          id,
+        },
+        {
+          type: "ShippingZone",
+          id: "LIST",
+        },
+      ],
+    }),
+
+    /* ================= DELETE ================= */
+
+    deleteShippingZone: builder.mutation<
+      ApiMessageResponse,
       string
     >({
       query: (id) => ({
@@ -136,324 +267,30 @@ export const shippingZoneApi = createApi({
         method: "DELETE",
       }),
 
-      invalidatesTags: ["ShippingZone"],
-    }),
-
-    /* =========================================================
-       SHIPPING ZONE STATES
-    ========================================================= */
-
-    createStateMapping: builder.mutation<
-      ShippingZoneState,
-      CreateShippingZoneStateInput
-    >({
-      query: (data) => ({
-        url: "/api/shipping-zones/states",
-        method: "POST",
-        data,
-      }),
+      transformResponse: (
+        response: ApiMessageResponse
+      ) => response,
 
       invalidatesTags: [
-        "ShippingZoneState",
-        "ShippingZone",
-      ],
-    }),
-
-    getAllStateMappings: builder.query<
-      ShippingZoneState[],
-      void
-    >({
-      query: () => ({
-        url: "/api/shipping-zones/states",
-        method: "GET",
-      }),
-
-      providesTags: ["ShippingZoneState"],
-    }),
-
-    getStateMappingById: builder.query<
-      ShippingZoneState,
-      string
-    >({
-      query: (id) => ({
-        url: `/api/shipping-zones/states/${id}`,
-        method: "GET",
-      }),
-
-      providesTags: (_r, _e, id) => [
         {
-          type: "ShippingZoneState",
-          id,
+          type: "ShippingZone",
+          id: "LIST",
         },
       ],
-    }),
-
-    updateStateMapping: builder.mutation<
-      ShippingZoneState,
-      {
-        id: string;
-        data: UpdateShippingZoneStateInput;
-      }
-    >({
-      query: ({ id, data }) => ({
-        url: `/api/shipping-zones/states/${id}`,
-        method: "PUT",
-        data,
-      }),
-
-      invalidatesTags: (_r, _e, { id }) => [
-        {
-          type: "ShippingZoneState",
-          id,
-        },
-        "ShippingZoneState",
-      ],
-    }),
-
-    deleteStateMapping: builder.mutation<
-      { message: string },
-      string
-    >({
-      query: (id) => ({
-        url: `/api/shipping-zones/states/${id}`,
-        method: "DELETE",
-      }),
-
-      invalidatesTags: [
-        "ShippingZoneState",
-        "ShippingZone",
-      ],
-    }),
-
-    bulkAssignStates: builder.mutation<
-      any,
-      {
-        zoneId: string;
-        stateIds: string[];
-      }
-    >({
-      query: (data) => ({
-        url: "/api/shipping-zones/states/bulk",
-        method: "POST",
-        data,
-      }),
-
-      invalidatesTags: [
-        "ShippingZoneState",
-        "ShippingZone",
-      ],
-    }),
-
-    clearZoneStates: builder.mutation<
-      any,
-      string
-    >({
-      query: (zoneId) => ({
-        url: `/api/shipping-zones/${zoneId}/states`,
-        method: "DELETE",
-      }),
-
-      invalidatesTags: [
-        "ShippingZoneState",
-        "ShippingZone",
-      ],
-    }),
-
-    getZonesByState: builder.query<
-      ShippingZoneState[],
-      string
-    >({
-      query: (stateId) => ({
-        url: `/api/shipping-zones/state/${stateId}/zones`,
-        method: "GET",
-      }),
-
-      providesTags: ["ShippingZoneState"],
-    }),
-
-    /* =========================================================
-       SHIPPING ZONE LGAS
-    ========================================================= */
-
-    createLGAMapping: builder.mutation<
-      ShippingZoneLGA,
-      CreateShippingZoneLGAInput
-    >({
-      query: (data) => ({
-        url: "/api/shipping-zones/lgas",
-        method: "POST",
-        data,
-      }),
-
-      invalidatesTags: [
-        "ShippingZoneLGA",
-        "ShippingZone",
-      ],
-    }),
-
-    getAllLGAMappings: builder.query<
-      ShippingZoneLGA[],
-      void
-    >({
-      query: () => ({
-        url: "/api/shipping-zones/lgas",
-        method: "GET",
-      }),
-
-      providesTags: ["ShippingZoneLGA"],
-    }),
-
-    getLGAMappingById: builder.query<
-      ShippingZoneLGA,
-      string
-    >({
-      query: (id) => ({
-        url: `/api/shipping-zones/lgas/${id}`,
-        method: "GET",
-      }),
-
-      providesTags: (_r, _e, id) => [
-        {
-          type: "ShippingZoneLGA",
-          id,
-        },
-      ],
-    }),
-
-    updateLGAMapping: builder.mutation<
-      ShippingZoneLGA,
-      {
-        id: string;
-        data: UpdateShippingZoneLGAInput;
-      }
-    >({
-      query: ({ id, data }) => ({
-        url: `/api/shipping-zones/lgas/${id}`,
-        method: "PUT",
-        data,
-      }),
-
-      invalidatesTags: (_r, _e, { id }) => [
-        {
-          type: "ShippingZoneLGA",
-          id,
-        },
-        "ShippingZoneLGA",
-      ],
-    }),
-
-    deleteLGAMapping: builder.mutation<
-      { message: string },
-      string
-    >({
-      query: (id) => ({
-        url: `/api/shipping-zones/lgas/${id}`,
-        method: "DELETE",
-      }),
-
-      invalidatesTags: [
-        "ShippingZoneLGA",
-        "ShippingZone",
-      ],
-    }),
-
-    bulkAssignLGAs: builder.mutation<
-      any,
-      {
-        zoneId: string;
-        lgaIds: string[];
-      }
-    >({
-      query: (data) => ({
-        url: "/api/shipping-zones/lgas/bulk",
-        method: "POST",
-        data,
-      }),
-
-      invalidatesTags: [
-        "ShippingZoneLGA",
-        "ShippingZone",
-      ],
-    }),
-
-    clearZoneLGAs: builder.mutation<
-      any,
-      string
-    >({
-      query: (zoneId) => ({
-        url: `/api/shipping-zones/${zoneId}/lgas`,
-        method: "DELETE",
-      }),
-
-      invalidatesTags: [
-        "ShippingZoneLGA",
-        "ShippingZone",
-      ],
-    }),
-
-    getLGAsByZone: builder.query<
-      ShippingZoneLGA[],
-      string
-    >({
-      query: (zoneId) => ({
-        url: `/api/shipping-zones/${zoneId}/lgas`,
-        method: "GET",
-      }),
-
-      providesTags: ["ShippingZoneLGA"],
-    }),
-
-    getZonesByLGA: builder.query<
-      ShippingZoneLGA[],
-      string
-    >({
-      query: (lgaId) => ({
-        url: `/api/shipping-zones/lga/${lgaId}/zones`,
-        method: "GET",
-      }),
-
-      providesTags: ["ShippingZoneLGA"],
     }),
   }),
 });
 
+/* =========================================================
+HOOKS
+========================================================= */
+
 export const {
-  /* =========================================================
-     SHIPPING ZONES
-  ========================================================= */
+  useGetShippingZonesQuery,
+  useGetShippingZoneByIdQuery,
 
-  useCreateZoneMutation,
-  useGetAllZonesQuery,
-  useGetActiveZonesQuery,
-  useGetZoneByIdQuery,
-  useUpdateZoneMutation,
-  useToggleZoneStatusMutation,
-  useDeleteZoneMutation,
-
-  /* =========================================================
-     SHIPPING ZONE STATES
-  ========================================================= */
-
-  useCreateStateMappingMutation,
-  useGetAllStateMappingsQuery,
-  useGetStateMappingByIdQuery,
-  useUpdateStateMappingMutation,
-  useDeleteStateMappingMutation,
-  useBulkAssignStatesMutation,
-  useClearZoneStatesMutation,
-  useGetZonesByStateQuery,
-
-  /* =========================================================
-     SHIPPING ZONE LGAS
-  ========================================================= */
-
-  useCreateLGAMappingMutation,
-  useGetAllLGAMappingsQuery,
-  useGetLGAMappingByIdQuery,
-  useUpdateLGAMappingMutation,
-  useDeleteLGAMappingMutation,
-  useBulkAssignLGAsMutation,
-  useClearZoneLGAsMutation,
-  useGetLGAsByZoneQuery,
-  useGetZonesByLGAQuery,
+  useCreateShippingZoneMutation,
+  useUpdateShippingZoneMutation,
+  useToggleShippingZoneStatusMutation,
+  useDeleteShippingZoneMutation,
 } = shippingZoneApi;

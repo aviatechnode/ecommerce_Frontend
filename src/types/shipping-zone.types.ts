@@ -1,117 +1,64 @@
+export type DeliveryMethod =
+  | "DOOR_DELIVERY"
+  | "PICKUP"
+  | "EXPRESS"
+  | "STANDARD";
+
 export interface ShippingZone {
   id: string;
-
   name: string;
-
-  code: string;
-
-  description?: string | null;
-
   isActive: boolean;
 
   createdAt: string;
-
   updatedAt: string;
 
-  states?: ShippingZoneState[];
+  states?: {
+    id: string;
+    name: string;
+  }[];
 
-  lgas?: ShippingZoneLGA[];
+  lgas?: {
+    id: string;
+    name: string;
+    stateId: string;
+    state?: {
+      id: string;
+      name: string;
+    };
+  }[];
 
-  rates?: any[];
+  rates?: ShippingRate[];
 }
 
-/* =========================================================
-   SHIPPING ZONE STATE
-========================================================= */
-
-export interface ShippingZoneState {
+export interface ShippingRate {
   id: string;
-
   zoneId: string;
 
-  stateId: string;
-
-  createdAt?: string;
-
-  updatedAt?: string;
-
-  zone?: ShippingZone;
-
-  state?: any;
-}
-
-/* =========================================================
-   SHIPPING ZONE LGA
-========================================================= */
-
-export interface ShippingZoneLGA {
-  id: string;
-
-  zoneId: string;
-
-  lgaId: string;
-
-  createdAt?: string;
-
-  updatedAt?: string;
-
-  zone?: ShippingZone;
-
-  lga?: any;
-}
-
-/* =========================================================
-   SHIPPING ZONE INPUTS
-========================================================= */
-
-export interface CreateShippingZoneInput {
   name: string;
+  deliveryMethod: DeliveryMethod;
 
-  code: string;
+  baseFee: number;
+  currency: string;
 
-  description?: string | null;
+  minWeight?: number | null;
+  maxWeight?: number | null;
 
-  isActive?: boolean;
-}
+  weightFee?: number | null;
 
-export interface UpdateShippingZoneInput {
-  name?: string;
+  minDistanceKm?: number | null;
+  maxDistanceKm?: number | null;
 
-  code?: string;
+  distanceFeeKm?: number | null;
 
-  description?: string | null;
+  minOrderValue?: number | null;
+  maxOrderValue?: number | null;
 
-  isActive?: boolean;
-}
+  estimatedDaysMin?: number | null;
+  estimatedDaysMax?: number | null;
 
-/* =========================================================
-   SHIPPING ZONE STATE INPUTS
-========================================================= */
+  priority: number;
+  isActive: boolean;
 
-export interface CreateShippingZoneStateInput {
-  zoneId: string;
-
-  stateId: string;
-}
-
-export interface UpdateShippingZoneStateInput {
-  zoneId?: string;
-
-  stateId?: string;
-}
-
-/* =========================================================
-   SHIPPING ZONE LGA INPUTS
-========================================================= */
-
-export interface CreateShippingZoneLGAInput {
-  zoneId: string;
-
-  lgaId: string;
-}
-
-export interface UpdateShippingZoneLGAInput {
-  zoneId?: string;
-
-  lgaId?: string;
+  createdAt: string;
+  updatedAt: string;
 }

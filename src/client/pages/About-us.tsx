@@ -1,5 +1,3 @@
-"use client";
-
 import {
   Wrench,
   Cog,
@@ -73,34 +71,46 @@ const categories = [
 export default function AboutPage() {
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Hero */}
-      <section className="border-b border-gray-200 bg-white">
-        <div className="mx-auto max-w-7xl px-6 py-16 lg:px-8">
-          <div className="max-w-4xl space-y-6">
-            <span className="inline-flex rounded-md bg-green-50 px-3 py-1 text-sm font-medium text-green-700">
+      {/* Hero Section with Background Image (text left, image shows more on right) */}
+      <section className="relative border-b border-gray-200">
+        {/* Background image container */}
+        <div
+          className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage:
+              "url('/oilfilter2.jpeg')",
+          }}
+        ></div>
+        {/* Optional overlay for better text readability (semi-transparent dark) */}
+        <div className="absolute inset-0 z-10 bg-black/40"></div>
+
+        {/* Content on top of image */}
+        <div className="relative z-20 mx-auto max-w-7xl px-6 py-20 lg:py-28 lg:px-8">
+          <div className="max-w-2xl space-y-6 text-white">
+            <span className="inline-flex rounded-md bg-green-700/80 px-3 py-1 text-sm font-medium text-white backdrop-blur-sm">
               Trusted Auto Parts Supplier
             </span>
 
-            <h1 className="text-4xl font-bold tracking-tight text-gray-900">
+            <h1 className="text-4xl font-bold tracking-tight md:text-5xl">
               Reliable Automotive Parts
-              <span className="block text-green-700">
+              <span className="block text-green-200">
                 For Everyday Repairs & Maintenance
               </span>
             </h1>
 
-            <p className="max-w-3xl text-lg leading-8 text-gray-600">
+            <p className="text-lg leading-8 text-gray-100">
               MOgrace Auto Parts supplies genuine and dependable automotive
               spare parts for Hyundai, Kia, Toyota, Lexus, and Honda vehicles.
               We serve mechanics, workshops, fleet owners, and individual
               drivers with quality parts and dependable support.
             </p>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-3 pt-4">
               <button className="rounded-lg bg-green-700 px-6 py-3 font-medium text-white transition hover:bg-green-800">
                 Contact Us
               </button>
 
-              <button className="rounded-lg border border-gray-300 bg-white px-6 py-3 font-medium text-gray-700 transition hover:bg-gray-100">
+              <button className="rounded-lg border border-white bg-transparent px-6 py-3 font-medium text-white transition hover:bg-white/10">
                 View Products
               </button>
             </div>

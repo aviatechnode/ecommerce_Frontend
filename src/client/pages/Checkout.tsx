@@ -8,7 +8,7 @@ import {
 import {
   useCreateCheckoutMutation,
   usePreviewCouponMutation,
-} from "../../services/checkoutApi";
+} from "../../services/checkoutApi"; // ✅ now points to the new checkoutApi
 import { useGetCartQuery } from "../../services/cartApi";
 import {
   useGetStatesQuery,
@@ -16,9 +16,10 @@ import {
 } from "../../services/locationApi";
 import { ChevronLeft, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import type { CheckoutResponse } from "../../types/checkout-types";
+import { useGetPickupStationsQuery } from "../../services/pickupStationApi";
 
-/* ================= TYPES ================= */
+// ================= TYPES =================
+// (These already exist in your codebase – included here for completeness)
 interface AddressFormData {
   name: string;
   phone: string;
@@ -42,7 +43,7 @@ interface CartItemForDisplay {
 
 type ShippingMethod = "STANDARD" | "EXPRESS" | "SAME_DAY" | "PICKUP_STATION";
 
-/* ================= HELPER ================= */
+// ================= HELPER =================
 const buildFullAddress = (
   street: string,
   area: string | undefined,
@@ -65,7 +66,7 @@ const transformCartItem = (item: any): CartItemForDisplay => ({
   image: item.variant?.product?.medias?.[0]?.url,
 });
 
-/* ================= REUSABLE COMPONENTS ================= */
+// ================= REUSABLE COMPONENTS =================
 const LoadingSpinner: React.FC<{ size?: "sm" | "md" | "lg" }> = ({ size = "md" }) => {
   const sizeClasses = {
     sm: "w-4 h-4",
@@ -88,11 +89,6 @@ const AddressSectionSkeleton: React.FC = () => (
         <div className="h-4 bg-gray-200 rounded w-48 mb-1"></div>
         <div className="h-4 bg-gray-200 rounded w-40"></div>
       </div>
-      <div className="p-4 border-2 border-gray-200 rounded-lg">
-        <div className="h-5 bg-gray-200 rounded w-32 mb-2"></div>
-        <div className="h-4 bg-gray-200 rounded w-48 mb-1"></div>
-        <div className="h-4 bg-gray-200 rounded w-40"></div>
-      </div>
     </div>
   </div>
 );
@@ -109,22 +105,10 @@ const OrderSummarySkeleton: React.FC = () => (
         </div>
         <div className="h-5 bg-gray-200 rounded w-16"></div>
       </div>
-      <div className="flex gap-3">
-        <div className="w-12 h-12 bg-gray-200 rounded"></div>
-        <div className="flex-1">
-          <div className="h-5 bg-gray-200 rounded w-24 mb-2"></div>
-          <div className="h-4 bg-gray-200 rounded w-20"></div>
-        </div>
-        <div className="h-5 bg-gray-200 rounded w-16"></div>
-      </div>
     </div>
     <div className="border-t border-gray-200 mt-4 pt-4 space-y-2">
       <div className="flex justify-between">
         <div className="h-4 bg-gray-200 rounded w-16"></div>
-        <div className="h-4 bg-gray-200 rounded w-20"></div>
-      </div>
-      <div className="flex justify-between">
-        <div className="h-4 bg-gray-200 rounded w-20"></div>
         <div className="h-4 bg-gray-200 rounded w-20"></div>
       </div>
       <div className="border-t border-gray-200 pt-2 mt-2">
@@ -182,11 +166,7 @@ const AddressCard: React.FC<{
             </span>
           )}
           {isSelected && (
-            <svg
-              className="w-5 h-5 text-green-500"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
+            <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
               <path
                 fillRule="evenodd"
                 clipRule="evenodd"
@@ -200,7 +180,7 @@ const AddressCard: React.FC<{
               onDelete();
             }}
             disabled={isDeleting}
-            className="p-1 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-1 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
             aria-label="Delete address"
           >
             {isDeleting ? (
@@ -225,9 +205,7 @@ const AddressSection: React.FC<{
   onDeleteAddress: (id: string) => void;
   deletingAddressId: string | null;
   newAddressForm: AddressFormData;
-  onNewAddressChange: (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => void;
+  onNewAddressChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
   onSaveNewAddress: () => void;
   creatingAddress: boolean;
   states: { id: string; name: string }[];
@@ -252,9 +230,7 @@ const AddressSection: React.FC<{
   lgas,
   lgasLoading,
 }) => {
-  if (addressLoading) {
-    return <AddressSectionSkeleton />;
-  }
+  if (addressLoading) return <AddressSectionSkeleton />;
 
   return (
     <div className="bg-white rounded-xl shadow-sm p-6">
@@ -277,18 +253,8 @@ const AddressSection: React.FC<{
             onClick={onNewAddressToggle}
             className="text-green-600 hover:text-green-700 font-medium text-sm flex items-center gap-1"
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             Add New Address
           </button>
@@ -301,6 +267,7 @@ const AddressSection: React.FC<{
           + Add Delivery Address
         </button>
       )}
+
       {useNewAddress && (
         <div className="mt-4 space-y-3">
           <h3 className="font-medium text-gray-900">New Address</h3>
@@ -311,7 +278,7 @@ const AddressSection: React.FC<{
               value={newAddressForm.name}
               onChange={onNewAddressChange}
               placeholder="Full name *"
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
             />
             <input
               type="tel"
@@ -319,7 +286,7 @@ const AddressSection: React.FC<{
               value={newAddressForm.phone}
               onChange={onNewAddressChange}
               placeholder="Phone number *"
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
             />
             <input
               type="text"
@@ -327,7 +294,7 @@ const AddressSection: React.FC<{
               value={newAddressForm.street}
               onChange={onNewAddressChange}
               placeholder="Street address *"
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
             />
             <input
               type="text"
@@ -335,7 +302,7 @@ const AddressSection: React.FC<{
               value={newAddressForm.area}
               onChange={onNewAddressChange}
               placeholder="Area (optional)"
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
             />
             <input
               type="text"
@@ -343,14 +310,14 @@ const AddressSection: React.FC<{
               value={newAddressForm.city}
               onChange={onNewAddressChange}
               placeholder="City *"
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
             />
             <select
               name="state"
               value={newAddressForm.state}
               onChange={onNewAddressChange}
               disabled={statesLoading}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
             >
               <option value="">{statesLoading ? "Loading states..." : "Select State"}</option>
               {states.map((state) => (
@@ -364,7 +331,7 @@ const AddressSection: React.FC<{
               value={newAddressForm.lga}
               onChange={onNewAddressChange}
               disabled={!newAddressForm.state || lgasLoading}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:bg-gray-100"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
             >
               <option value="">
                 {lgasLoading
@@ -385,7 +352,7 @@ const AddressSection: React.FC<{
               value={newAddressForm.landmark}
               onChange={onNewAddressChange}
               placeholder="Landmark (optional)"
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
             />
             <label className="flex items-center gap-2 col-span-full">
               <input
@@ -434,9 +401,7 @@ const OrderSummary: React.FC<{
   onRemoveCoupon,
   cartLoading,
 }) => {
-  if (cartLoading) {
-    return <OrderSummarySkeleton />;
-  }
+  if (cartLoading) return <OrderSummarySkeleton />;
 
   const getItemPrice = (item: CartItemForDisplay) => item.unitPrice ?? item.price;
   return (
@@ -445,22 +410,14 @@ const OrderSummary: React.FC<{
       <div className="space-y-3 max-h-64 overflow-y-auto mb-4">
         {cartItems.map((item) => (
           <div key={item.id} className="flex gap-3">
-            {item.image && (
-              <img
-                src={item.image}
-                alt={item.name}
-                className="w-12 h-12 object-cover rounded"
-              />
-            )}
+            {item.image && <img src={item.image} alt={item.name} className="w-12 h-12 object-cover rounded" />}
             <div className="flex-1">
               <p className="font-medium text-gray-900">{item.name}</p>
               <p className="text-sm text-gray-600">
                 Qty: {item.quantity} × ₦{getItemPrice(item).toLocaleString()}
               </p>
             </div>
-            <p className="font-medium">
-              ₦{(getItemPrice(item) * item.quantity).toLocaleString()}
-            </p>
+            <p className="font-medium">₦{(getItemPrice(item) * item.quantity).toLocaleString()}</p>
           </div>
         ))}
       </div>
@@ -487,10 +444,7 @@ const OrderSummary: React.FC<{
         </div>
       </div>
       {couponPreview?.valid && (
-        <button
-          onClick={onRemoveCoupon}
-          className="mt-3 text-sm text-red-500 hover:text-red-600"
-        >
+        <button onClick={onRemoveCoupon} className="mt-3 text-sm text-red-500 hover:text-red-600">
           Remove coupon
         </button>
       )}
@@ -505,14 +459,7 @@ const CouponSection: React.FC<{
   onRemoveCoupon: () => void;
   couponApplying: boolean;
   couponPreview: any;
-}> = ({
-  couponCode,
-  setCouponCode,
-  onApplyCoupon,
-  onRemoveCoupon,
-  couponApplying,
-  couponPreview,
-}) => {
+}> = ({ couponCode, setCouponCode, onApplyCoupon, onRemoveCoupon, couponApplying, couponPreview }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm p-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-4">Coupon Code</h2>
@@ -522,21 +469,18 @@ const CouponSection: React.FC<{
           value={couponCode}
           onChange={(e) => setCouponCode(e.target.value)}
           placeholder="Enter coupon code"
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
           disabled={!!couponPreview?.valid}
         />
         {couponPreview?.valid ? (
-          <button
-            onClick={onRemoveCoupon}
-            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-          >
+          <button onClick={onRemoveCoupon} className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">
             Remove
           </button>
         ) : (
           <button
             onClick={onApplyCoupon}
             disabled={couponApplying || !couponCode.trim()}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
           >
             {couponApplying && <LoadingSpinner size="sm" />}
             Apply
@@ -547,9 +491,7 @@ const CouponSection: React.FC<{
         <p className="mt-2 text-sm text-red-500">{couponPreview.message}</p>
       )}
       {couponPreview?.valid && (
-        <p className="mt-2 text-sm text-green-600">
-          {couponPreview.discount.toLocaleString()} discount applied!
-        </p>
+        <p className="mt-2 text-sm text-green-600">{couponPreview.discount.toLocaleString()} discount applied!</p>
       )}
     </div>
   );
@@ -598,9 +540,53 @@ const ShippingMethodSelector: React.FC<{
   );
 };
 
+// ================= PICKUP STATION SELECTOR =================
+const PickupStationSelector: React.FC<{
+  selectedStationId: string | null;
+  onSelect: (id: string) => void;
+}> = ({ selectedStationId, onSelect }) => {
+  const { data: stations, isLoading } = useGetPickupStationsQuery();
+
+  if (isLoading) return <div className="text-sm text-gray-500">Loading pickup stations...</div>;
+  if (!stations?.length) return <div className="text-sm text-red-500">No pickup stations available</div>;
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-6">
+      <h2 className="text-xl font-semibold text-gray-900 mb-4">Pickup Station</h2>
+      <div className="space-y-3">
+        {stations.map((station: any) => (
+          <label
+            key={station.id}
+            className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+              selectedStationId === station.id
+                ? "border-green-500 bg-green-50"
+                : "border-gray-200 hover:border-green-300"
+            }`}
+          >
+            <input
+              type="radio"
+              name="pickupStation"
+              value={station.id}
+              checked={selectedStationId === station.id}
+              onChange={() => onSelect(station.id)}
+              className="mt-0.5 text-green-600 focus:ring-green-500"
+            />
+            <div>
+              <p className="font-medium text-gray-900">{station.name}</p>
+              <p className="text-sm text-gray-500">{station.address}</p>
+              {station.operatingHours && (
+                <p className="text-xs text-gray-400">{station.operatingHours}</p>
+              )}
+            </div>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 /* ================= MAIN PAGE ================= */
 const CheckoutPage: React.FC = () => {
-  // Fetch cart data
   const {
     data: cartData,
     isLoading: cartLoading,
@@ -608,7 +594,6 @@ const CheckoutPage: React.FC = () => {
     error: cartErrorObj,
   } = useGetCartQuery();
 
-  // Address queries
   const {
     data: addressesData,
     isLoading: addressLoading,
@@ -622,7 +607,6 @@ const CheckoutPage: React.FC = () => {
   const [previewCoupon, { isLoading: couponApplying }] = usePreviewCouponMutation();
   const navigate = useNavigate();
 
-  // Location queries
   const {
     data: states = [],
     isLoading: statesLoading,
@@ -633,14 +617,13 @@ const CheckoutPage: React.FC = () => {
     data: lgas = [],
     isLoading: lgasLoading,
     isFetching: lgasFetching,
-  } = useGetLgasByStateQuery(selectedStateId, {
-    skip: !selectedStateId,
-  });
+  } = useGetLgasByStateQuery(selectedStateId, { skip: !selectedStateId });
 
   // Local state
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [useNewAddress, setUseNewAddress] = useState(false);
   const [shippingMethod, setShippingMethod] = useState<ShippingMethod>("STANDARD");
+  const [selectedPickupStationId, setSelectedPickupStationId] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState("");
   const [couponPreview, setCouponPreview] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -659,25 +642,21 @@ const CheckoutPage: React.FC = () => {
     isDefault: false,
   });
 
-  // When state selection changes, reset LGA and fetch new LGAs (handled by RTK query skip)
   useEffect(() => {
     if (newAddressForm.state !== selectedStateId) {
       setSelectedStateId(newAddressForm.state);
-      if (newAddressForm.lga) {
-        setNewAddressForm((prev) => ({ ...prev, lga: "" }));
-      }
+      if (newAddressForm.lga) setNewAddressForm((prev) => ({ ...prev, lga: "" }));
     }
   }, [newAddressForm.state, selectedStateId]);
 
   const rawCartItems = cartData?.cart?.items ?? [];
   const cartItemsDisplay = rawCartItems.map(transformCartItem);
   const cartSubtotal = cartData?.totals?.subtotal ?? 0;
-  const initialShipping = cartData?.shipping ?? 0;
+  const initialShipping = cartData?.shipping?.deliveryFee ?? 0;
 
   const [shippingFee, setShippingFee] = useState(0);
   const [finalAmount, setFinalAmount] = useState(0);
 
-  // Update shipping and final amount when cart loads or coupon changes
   useEffect(() => {
     if (!cartLoading && cartData) {
       setShippingFee(initialShipping);
@@ -685,15 +664,10 @@ const CheckoutPage: React.FC = () => {
     }
   }, [cartLoading, cartData, couponPreview, initialShipping, cartSubtotal]);
 
-  // Auto-select default address when addresses load
   useEffect(() => {
     if (!addressLoading && savedAddresses.length > 0 && !selectedAddressId) {
       const defaultAddr = savedAddresses.find((addr) => addr.isDefault);
-      if (defaultAddr) {
-        setSelectedAddressId(defaultAddr.id);
-      } else {
-        setSelectedAddressId(savedAddresses[0].id);
-      }
+      setSelectedAddressId(defaultAddr ? defaultAddr.id : savedAddresses[0].id);
     }
   }, [addressLoading, savedAddresses, selectedAddressId]);
 
@@ -706,7 +680,6 @@ const CheckoutPage: React.FC = () => {
               <div className="h-9 bg-gray-200 rounded w-32 animate-pulse mb-2"></div>
               <div className="h-5 bg-gray-200 rounded w-64 animate-pulse"></div>
             </div>
-            <div className="h-10 w-32 bg-gray-200 rounded animate-pulse"></div>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
@@ -724,16 +697,12 @@ const CheckoutPage: React.FC = () => {
   }
 
   if (cartError) {
-    const errorMsg =
-      (cartErrorObj as any)?.data?.message || "Failed to load your cart. Please try again.";
+    const errorMsg = (cartErrorObj as any)?.data?.message || "Failed to load your cart. Please try again.";
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg text-center">
           <p>{errorMsg}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-          >
+          <button onClick={() => window.location.reload()} className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg">
             Retry
           </button>
         </div>
@@ -746,10 +715,7 @@ const CheckoutPage: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="text-center">
           <p className="text-gray-600">Your cart is empty.</p>
-          <button
-            onClick={() => window.history.back()}
-            className="mt-4 text-green-600 hover:text-green-700"
-          >
+          <button onClick={() => window.history.back()} className="mt-4 text-green-600 hover:text-green-700">
             Go back
           </button>
         </div>
@@ -762,30 +728,14 @@ const CheckoutPage: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg
-              className="w-8 h-8 text-green-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 13l4 4L19 7"
-              />
+            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Order Placed!</h2>
-          <p className="text-gray-600 mb-4">
-            Your order has been created successfully.
-          </p>
-          <p className="text-sm text-gray-500 mb-6">
-            Redirecting you to complete payment...
-          </p>
-          <div className="flex justify-center">
-            <LoadingSpinner />
-          </div>
+          <p className="text-gray-600 mb-4">Your order has been created successfully.</p>
+          <p className="text-sm text-gray-500 mb-6">Redirecting you to complete payment...</p>
+          <div className="flex justify-center"><LoadingSpinner /></div>
         </div>
       </div>
     );
@@ -802,9 +752,7 @@ const CheckoutPage: React.FC = () => {
     setSelectedAddressId(null);
   };
 
-  const handleNewAddressChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
+  const handleNewAddressChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     const checked = (e.target as HTMLInputElement).checked;
     setNewAddressForm((prev) => ({
@@ -814,21 +762,13 @@ const CheckoutPage: React.FC = () => {
   };
 
   const handleSaveNewAddress = async () => {
-    if (
-      !newAddressForm.name ||
-      !newAddressForm.phone ||
-      !newAddressForm.street ||
-      !newAddressForm.city ||
-      !newAddressForm.state ||
-      !newAddressForm.lga
-    ) {
+    if (!newAddressForm.name || !newAddressForm.phone || !newAddressForm.street || !newAddressForm.city || !newAddressForm.state || !newAddressForm.lga) {
       setError("Please fill all required fields");
       return;
     }
 
     const selectedState = states.find((s) => s.id === newAddressForm.state);
     const selectedLga = lgas.find((l) => l.id === newAddressForm.lga);
-
     if (!selectedState || !selectedLga) {
       setError("Invalid state or LGA selection");
       return;
@@ -878,18 +818,12 @@ const CheckoutPage: React.FC = () => {
   };
 
   const handleDeleteAddress = async (addressId: string) => {
-    const confirmDelete = window.confirm(
-      "Are you sure you want to delete this address? This action cannot be undone."
-    );
-    if (!confirmDelete) return;
-
+    if (!window.confirm("Are you sure you want to delete this address?")) return;
     setDeletingAddressId(addressId);
     try {
       await deleteAddress(addressId).unwrap();
       await refetchAddresses();
-      if (selectedAddressId === addressId) {
-        setSelectedAddressId(null);
-      }
+      if (selectedAddressId === addressId) setSelectedAddressId(null);
       setError(null);
     } catch (err: any) {
       setError(err?.data?.message || "Failed to delete address");
@@ -898,18 +832,27 @@ const CheckoutPage: React.FC = () => {
     }
   };
 
+  // ✅ Corrected coupon handler – uses mutation result directly (no .unwrap())
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return;
-    try {
-      const result = await previewCoupon({
-        code: couponCode,
-        orderAmount: cartSubtotal + shippingFee,
-      }).unwrap();
-      setCouponPreview(result);
-      setError(null);
-    } catch (err: any) {
-      setCouponPreview({ valid: false, message: err?.message || "Invalid coupon" });
+    const result = await previewCoupon({
+      code: couponCode,
+      orderAmount: cartSubtotal + shippingFee,
+    });
+    // The API's transformErrorResponse guarantees a CouponPreview object even on error.
+    if (result.data) {
+      setCouponPreview(result.data);
+    } else if (result.error) {
+      // Fallback: should not happen because transformErrorResponse returns a shaped object,
+      // but we handle it gracefully.
+      setCouponPreview({
+        valid: false,
+        discount: 0,
+        finalAmount: 0,
+        message: (result.error as any)?.data?.message || "Invalid coupon",
+      });
     }
+    setError(null);
   };
 
   const handleRemoveCoupon = () => {
@@ -918,87 +861,72 @@ const CheckoutPage: React.FC = () => {
   };
 
   const handlePlaceOrder = async () => {
-  if (!selectedAddressId && !useNewAddress) {
-    setError("Please select or add a delivery address");
-    return;
-  }
+    if (!selectedAddressId && !useNewAddress) {
+      setError("Please select or add a delivery address");
+      return;
+    }
 
-  setError(null);
+    if (shippingMethod === "PICKUP_STATION" && !selectedPickupStationId) {
+      setError("Please select a pickup station");
+      return;
+    }
 
-  try {
-    const payload: any = {
-      shippingMethod: shippingMethod,
-    };
+    setError(null);
 
-    if (useNewAddress) {
-      if (
-        !newAddressForm.name ||
-        !newAddressForm.phone ||
-        !newAddressForm.street ||
-        !newAddressForm.city ||
-        !newAddressForm.state ||
-        !newAddressForm.lga
-      ) {
-        setError("Please complete the new address form");
-        return;
-      }
-
-      const selectedState = states.find((s) => s.id === newAddressForm.state);
-      const selectedLga = lgas.find((l) => l.id === newAddressForm.lga);
-
-      if (!selectedState || !selectedLga) {
-        setError("Invalid state or LGA selection");
-        return;
-      }
-
-      payload.address = {
-        name: newAddressForm.name,
-        phone: newAddressForm.phone,
-        stateId: newAddressForm.state,
-        lgaId: newAddressForm.lga,
-        city: newAddressForm.city,
-        area: newAddressForm.area,
-        street: newAddressForm.street,
-        landmark: newAddressForm.landmark,
+    try {
+      const payload: any = {
+        shippingMethod,
       };
-    } else if (selectedAddressId) {
-      payload.addressId = selectedAddressId;
-    } else {
-      setError("No address selected");
-      return;
+
+      if (useNewAddress) {
+        if (!newAddressForm.name || !newAddressForm.phone || !newAddressForm.street || !newAddressForm.city || !newAddressForm.state || !newAddressForm.lga) {
+          setError("Please complete the new address form");
+          return;
+        }
+
+        const selectedState = states.find((s) => s.id === newAddressForm.state);
+        const selectedLga = lgas.find((l) => l.id === newAddressForm.lga);
+        if (!selectedState || !selectedLga) {
+          setError("Invalid state or LGA selection");
+          return;
+        }
+
+        payload.address = {
+          name: newAddressForm.name,
+          phone: newAddressForm.phone,
+          stateId: newAddressForm.state,
+          lgaId: newAddressForm.lga,
+          city: newAddressForm.city,
+          area: newAddressForm.area,
+          street: newAddressForm.street,
+          landmark: newAddressForm.landmark,
+        };
+      } else if (selectedAddressId) {
+        payload.addressId = selectedAddressId;
+      } else {
+        setError("No address selected");
+        return;
+      }
+
+      if (couponPreview?.valid) {
+        payload.couponCode = couponCode;
+      }
+
+      if (shippingMethod === "PICKUP_STATION") {
+        payload.pickupStationId = selectedPickupStationId;
+      }
+
+      const result = await createCheckout(payload).unwrap();
+      const { authorizationUrl } = result;
+      if (!authorizationUrl) throw new Error("No authorization URL returned");
+
+      setIsRedirecting(true);
+      window.location.href = authorizationUrl;
+    } catch (err: any) {
+      setError(err?.message || "Failed to place order");
     }
+  };
 
-    if (couponPreview?.valid) {
-      payload.couponCode = couponCode;
-    }
-
-    if (shippingMethod === "PICKUP_STATION") {
-      // TODO: Implement pickup station selection
-      payload.pickupStationId = null;
-    }
-
-    const result = await createCheckout(payload).unwrap();
-
-    // Handle duplicate response
-    if ("data" in result && result.message === "Duplicate request") {
-      setError("Order already processed. Please check your orders.");
-      return;
-    }
-
-    // Now TypeScript knows it's a successful CheckoutResponse
-    const checkoutResponse = result as CheckoutResponse;
-    const { authorizationUrl } = checkoutResponse;
-
-    if (!authorizationUrl) {
-      throw new Error("No authorization URL returned");
-    }
-
-    setIsRedirecting(true);
-    window.location.href = authorizationUrl;
-  } catch (err: any) {
-    setError(err?.data?.message || err?.message || "Failed to place order");
-  }
-};
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
@@ -1011,7 +939,7 @@ const CheckoutPage: React.FC = () => {
             onClick={() => navigate(-1)}
             className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-green-600 transition-colors border border-gray-300 rounded-lg hover:border-green-500"
           >
-            <ChevronLeft size={20} className="group-hover:-translate-x-1 transition" />
+            <ChevronLeft size={20} />
             Back
           </button>
         </div>
@@ -1019,9 +947,7 @@ const CheckoutPage: React.FC = () => {
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center justify-between">
             <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">
-              ×
-            </button>
+            <button onClick={() => setError(null)} className="text-red-500 hover:text-red-700">×</button>
           </div>
         )}
 
@@ -1051,10 +977,10 @@ const CheckoutPage: React.FC = () => {
               lgas={lgas}
               lgasLoading={lgasLoading || lgasFetching}
             />
-            <ShippingMethodSelector
-              selectedMethod={shippingMethod}
-              onMethodChange={setShippingMethod}
-            />
+            <ShippingMethodSelector selectedMethod={shippingMethod} onMethodChange={setShippingMethod} />
+            {shippingMethod === "PICKUP_STATION" && (
+              <PickupStationSelector selectedStationId={selectedPickupStationId} onSelect={setSelectedPickupStationId} />
+            )}
             <CouponSection
               couponCode={couponCode}
               setCouponCode={setCouponCode}
@@ -1082,13 +1008,8 @@ const CheckoutPage: React.FC = () => {
                 placeOrderLoading ||
                 isRedirecting ||
                 (!selectedAddressId && !useNewAddress) ||
-                (useNewAddress &&
-                  (!newAddressForm.name ||
-                    !newAddressForm.phone ||
-                    !newAddressForm.street ||
-                    !newAddressForm.city ||
-                    !newAddressForm.state ||
-                    !newAddressForm.lga))
+                (useNewAddress && (!newAddressForm.name || !newAddressForm.phone || !newAddressForm.street || !newAddressForm.city || !newAddressForm.state || !newAddressForm.lga)) ||
+                (shippingMethod === "PICKUP_STATION" && !selectedPickupStationId)
               }
               className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >

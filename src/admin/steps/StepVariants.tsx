@@ -7,7 +7,7 @@ import { useGetBrandsQuery } from "../../services/brandApi";
 import { useGetCategoriesQuery } from "../../services/categoryApi";
 import { generateSKU } from "../../client/helpers/skuGenerator";
 import type { StepProps } from "./util/stepProps";
-import type { productVariantSchema } from "../../schemas/product.schema";
+import type { ProductVariant } from "../../schemas/product.schema";
 
 /* =========================================================
    COMPONENT PROPS
@@ -58,7 +58,7 @@ function StepVariantsComponent({ nextStep, prevStep }: StepVariantsProps) {
   const addVariant = () => {
     const index = variantList.length;
 
-    const newVariant: productVariantSchema = {
+    const newVariant: ProductVariant = {
       name: "",
       sku: generateSKU({
         brand: selectedBrand?.name,

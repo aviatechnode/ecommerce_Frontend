@@ -15,6 +15,8 @@ import {
   Headphones,
   Heart,
   ShoppingBag,
+  Award,
+  Clock,
 } from "lucide-react";
 
 const Footer = () => {
@@ -29,27 +31,27 @@ const Footer = () => {
     <footer className="bg-white/95 backdrop-blur-xl border-t border-gray-100 mt-auto font-sans">
       {/* Main Footer Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-8">
-        {/* Top Section: Logo only (newsletter removed) */}
+        {/* Top Section: Logo only */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 pb-10 border-b border-gray-100">
           <div className="flex items-center gap-3 group cursor-pointer" onClick={() => handleNavigation("/")}>
             <img
-              src="/mograce_auto_parts_cropped.avif"
-              width={42}
-              height={42}
+              src="/logou.png"
+              width={80}
+              height={80}
               alt="MOgrace Auto Parts"
               className="transition-transform duration-300 group-hover:scale-105"
             />
             <div>
               <span className="font-bold text-xl text-gray-800 tracking-tight block">
-                MOgrace Auto Parts
+                MOGRACE AUTOPARTS
               </span>
-              <span className="text-xs text-gray-500">Premium Auto Parts Since 2020</span>
+              <span className="text-xs text-gray-500">Trusted Auto Parts Since 2023</span>
             </div>
           </div>
         </div>
 
-        {/* Middle Section: 4 Columns */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 py-12">
+        {/* Middle Section: 5 Columns (added Why Choose Us) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8 py-12">
           {/* Column 1: Quick Links */}
           <div>
             <h3 className="font-semibold text-gray-800 text-lg mb-4 flex items-center gap-2">
@@ -188,7 +190,7 @@ const Footer = () => {
             </ul>
           </div>
 
-          {/* Column 4: Contact Info */}
+          {/* Column 4: Get in Touch */}
           <div>
             <h3 className="font-semibold text-gray-800 text-lg mb-4 flex items-center gap-2">
               <MapPin size={18} className="text-emerald-600" />
@@ -256,13 +258,51 @@ const Footer = () => {
               </div>
             </div>
           </div>
+
+          {/* Column 5: Why Choose Us */}
+          <div>
+            <h3 className="font-semibold text-gray-800 text-lg mb-4 flex items-center gap-2">
+              <Award size={18} className="text-emerald-600" />
+              Why Choose Us
+            </h3>
+            <ul className="space-y-4">
+              <li className="flex items-start gap-3">
+                <Shield size={16} className="text-emerald-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Genuine OEM Parts</p>
+                  <p className="text-xs text-gray-500">100% authentic, verified quality</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-3">
+                <Truck size={16} className="text-emerald-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Fast Delivery</p>
+                  <p className="text-xs text-gray-500">Nationwide delivery in 2-5 days</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-3">
+                <Clock size={16} className="text-emerald-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-800">12-Month Warranty</p>
+                  <p className="text-xs text-gray-500">Peace of mind on every purchase</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-3">
+                <Headphones size={16} className="text-emerald-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Expert Support</p>
+                  <p className="text-xs text-gray-500">Real mechanics ready to help</p>
+                </div>
+              </li>
+            </ul>
+          </div>
         </div>
 
         {/* Trust Badges Row */}
         <div className="flex flex-wrap justify-center gap-6 py-6 border-t border-gray-100">
           <div className="flex items-center gap-2 text-gray-500 text-sm">
             <Truck size={18} className="text-emerald-600" />
-            <span>Free Shipping Over ₦50,000</span>
+            <span>Fast delivery</span>
           </div>
           <div className="flex items-center gap-2 text-gray-500 text-sm">
             <RefreshCw size={18} className="text-emerald-600" />
@@ -308,7 +348,7 @@ const Footer = () => {
         </div>
       </div>
 
-      {/* Add custom animation for fade-in (kept for any other animations) */}
+      {/* Custom animation */}
       <style>{`
         @keyframes fade-in {
           from {

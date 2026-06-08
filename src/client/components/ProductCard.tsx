@@ -86,12 +86,11 @@ export default function ProductCard({ product }: Props) {
       return new Intl.NumberFormat("en-NG", {
         style: "currency",
         currency: "NGN",
-        minimumFractionDigits: 0,   // Hide .00 for whole Naira
+        minimumFractionDigits: 0,
         maximumFractionDigits: 0,
       }).format(price);
     }
     if (typeof price === "string") {
-      // If the API returns a string like "5000", prefix with ₦ symbol
       return `₦${price}`;
     }
     return "Price N/A";
@@ -158,14 +157,13 @@ export default function ProductCard({ product }: Props) {
       className="
         group relative flex flex-col
         overflow-hidden rounded-xl
-        border border-gray-200 bg-white
-        transition-all duration-200
-        hover:border-green-200
+        bg-white
+        transition-colors duration-200
         cursor-pointer
       "
     >
       {/* IMAGE SECTION - SQUARE ASPECT, COMPACT */}
-      <div className="relative aspect-square w-full overflow-hidden bg-gray-100">
+      <div className="relative aspect-square w-full overflow-hidden bg-gray-50">
         {image ? (
           <img
             src={image}
@@ -178,12 +176,12 @@ export default function ProductCard({ product }: Props) {
           </div>
         )}
 
-        {/* WISHLIST BUTTON - SMALLER */}
+        {/* WISHLIST BUTTON */}
         <button
           onClick={handleWishlist}
           className={`
             absolute top-2 right-2 rounded-full
-            bg-white/80 p-1.5 shadow-sm backdrop-blur-sm
+            bg-white p-1.5
             transition-transform
             ${heartAnimating ? "scale-125" : "scale-100"}
           `}
@@ -195,13 +193,13 @@ export default function ProductCard({ product }: Props) {
               ${
                 isWishlisted
                   ? "fill-amber-500 text-amber-500"
-                  : "text-gray-600"
+                  : "text-gray-500 hover:text-amber-500"
               }
             `}
           />
         </button>
 
-        {/* STOCK BADGES - COMPACT */}
+        {/* STOCK BADGES */}
         {!stockStatus.available && (
           <div className="absolute top-2 left-2 rounded-md bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
             Out of Stock
@@ -214,23 +212,23 @@ export default function ProductCard({ product }: Props) {
         )}
       </div>
 
-      {/* CONTENT SECTION - TIGHT PADDING, MICRO LAYOUT */}
+      {/* CONTENT SECTION */}
       <div className="flex flex-col gap-1.5 p-3">
         {/* PRODUCT TITLE */}
-        <h3 className="line-clamp-2 text-sm font-medium leading-tight text-gray-800">
+        <h3 className="line-clamp-2 text-sm font-medium leading-tight text-gray-800 group-hover:text-emerald-700">
           {product.name}
         </h3>
 
         {/* OEM NUMBERS */}
         {oemDisplay && (
-          <p className="line-clamp-1 text-xs text-gray-400">
-            {oemDisplay}
+          <p className="line-clamp-1 text-xs text-gray-500">
+            OEM: {oemDisplay}
           </p>
         )}
 
         {/* PRICE & ADD TO CART ROW */}
         <div className="mt-1 flex items-center justify-between gap-2">
-          <span className="text-base font-bold text-green-700">
+          <span className="text-base font-bold text-emerald-700">
             {displayPrice}
           </span>
 
@@ -240,13 +238,13 @@ export default function ProductCard({ product }: Props) {
             className={`
               flex items-center justify-center gap-1
               rounded-lg px-3 py-1.5 text-xs font-medium
-              transition-all active:scale-95
+              transition-colors active:scale-95
               ${
                 added
-                  ? "bg-green-700 text-white"
+                  ? "bg-emerald-600 text-white"
                   : stockStatus.available
-                  ? "bg-green-600 text-white hover:bg-green-700"
-                  : "cursor-not-allowed bg-gray-200 text-gray-500"
+                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                  : "cursor-not-allowed bg-gray-100 text-gray-400"
               }
             `}
           >

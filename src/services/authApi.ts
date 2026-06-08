@@ -1,7 +1,11 @@
-import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import { setCsrfToken, getCsrfToken } from "../lib/csrf";
+import { createApi } from "@reduxjs/toolkit/query/react";
+import type { BaseQueryFn } from "@reduxjs/toolkit/query";
 
-/* ================= USER ================= */
+import { axiosBaseQuery } from "../api/axiosBaseQuery";
+
+///////////////////////////////////////////////////////////
+// TYPES
+///////////////////////////////////////////////////////////
 
 export interface User {
   id: string;
@@ -9,154 +13,181 @@ export interface User {
   name: string;
   roleName: string;
   permissions: string[];
-  isSuperAdmin: boolean;
 }
 
-/* ================= BASE QUERY ================= */
+export interface AuthResponse {
+  accessToken: string;
+  csrfToken: string;
+  user: User;
+}
 
-const baseQuery = fetchBaseQuery({
-  baseUrl: import.meta.env.VITE_API_URL,
-  credentials: "include",
+export interface LoginPayload {
+  email: string;
+  password: string;
+}
 
-  prepareHeaders: (headers) => {
-    const csrf = getCsrfToken();
+export interface SignupPayload {
+  email: string;
+  password: string;
+  name: string;
+}
 
-    if (csrf) {
-      headers.set("x-csrf-token", csrf);
-    }
+export interface ForgotPasswordPayload {
+  email: string;
+}
 
-    return headers;
-  },
-});
+export interface ResetPasswordPayload {
+  token: string;
+  password: string;
+}
 
-/* ================= SAFE BASE QUERY (handles refresh) ================= */
-
-const baseQueryWithReauth: typeof baseQuery = async (args, api, extraOptions) => {
-  let result = await baseQuery(args, api, extraOptions);
-
-  // 🔥 if unauthorized → try refresh once
-  if (result.error?.status === 401) {
-    const refresh = await baseQuery(
-      { url: "/api/auth/refresh", method: "POST" },
-      api,
-      extraOptions
-    );
-
-    if (refresh.data && (refresh.data as any).csrfToken) {
-      setCsrfToken((refresh.data as any).csrfToken);
-    }
-
-    // retry original request
-    result = await baseQuery(args, api, extraOptions);
-  }
-
-  return result;
-};
-
-/* ================= API ================= */
+///////////////////////////////////////////////////////////
+// API
+///////////////////////////////////////////////////////////
 
 export const authApi = createApi({
   reducerPath: "authApi",
-  baseQuery: baseQueryWithReauth,
+
+  baseQuery: axiosBaseQuery() as BaseQueryFn,
+
   tagTypes: ["Auth"],
 
   endpoints: (builder) => ({
-    /* ================= ME ================= */
-    me: builder.query<User, void>({
-      query: () => "/api/auth/me",
-      transformResponse: (res: any): User => ({
-        ...res.user,
-        isSuperAdmin: res.user.roleName === "SUPER_ADMIN",
-      }),
-      providesTags: ["Auth"],
-    }),
+    ///////////////////////////////////////////////////////
+    // SIGNUP
+    ///////////////////////////////////////////////////////
 
-    /* ================= SIGNIN ================= */
-    signin: builder.mutation<
-      User,
-      { email: string; password: string }
-    >({
-      query: (body) => ({
-        url: "/api/auth/signin",
-        method: "POST",
-        body,
-      }),
-
-      async onQueryStarted(_, { queryFulfilled }) {
-        const { data } = await queryFulfilled;
-
-        setCsrfToken((data as any).csrfToken);
-      },
-
-      invalidatesTags: ["Auth"],
-    }),
-
-    /* ================= SIGNUP ================= */
-    signup: builder.mutation<
-      User,
-      { name: string; email: string; password: string }
-    >({
+    signup: builder.mutation<AuthResponse, SignupPayload>({
       query: (body) => ({
         url: "/api/auth/signup",
         method: "POST",
-        body,
+        data: body,
       }),
-
-      async onQueryStarted(_, { queryFulfilled }) {
-        const { data } = await queryFulfilled;
-
-        setCsrfToken((data as any).csrfToken);
-      },
 
       invalidatesTags: ["Auth"],
     }),
 
-    /* ================= GOOGLE ================= */
-    google: builder.mutation<User, { token: string }>({
+    ///////////////////////////////////////////////////////
+    // SIGNIN
+    ///////////////////////////////////////////////////////
+
+    signin: builder.mutation<AuthResponse, LoginPayload>({
       query: (body) => ({
-        url: "/api/auth/google",
+        url: "/api/auth/signin",
         method: "POST",
-        body,
+        data: body,
       }),
-
-      async onQueryStarted(_, { queryFulfilled }) {
-        const { data } = await queryFulfilled;
-
-        if ((data as any).csrfToken) {
-          setCsrfToken((data as any).csrfToken);
-        }
-      },
 
       invalidatesTags: ["Auth"],
     }),
 
-    /* ================= SIGNOUT ================= */
-    signout: builder.mutation<void, void>({
+    ///////////////////////////////////////////////////////
+    // REFRESH TOKEN
+    ///////////////////////////////////////////////////////
+
+    refresh: builder.mutation<
+      { accessToken: string; csrfToken: string },
+      void
+    >({
+      query: () => ({
+        url: "/api/auth/refresh",
+        method: "POST",
+      }),
+    }),
+
+    ///////////////////////////////////////////////////////
+    // LOGOUT
+    ///////////////////////////////////////////////////////
+
+    signout: builder.mutation<{ message: string }, void>({
       query: () => ({
         url: "/api/auth/signout",
         method: "POST",
       }),
 
-      async onQueryStarted(_, { dispatch, queryFulfilled }) {
-        try {
-          await queryFulfilled;
-        } finally {
-          setCsrfToken(null);
-          localStorage.removeItem("accessToken");
+      invalidatesTags: ["Auth"],
+    }),
 
-          dispatch(authApi.util.resetApiState());
-        }
+    ///////////////////////////////////////////////////////
+    // CURRENT USER
+    ///////////////////////////////////////////////////////
+
+    me: builder.query<{ user: User }, void>({
+      query: () => ({
+        url: "/api/auth/me",
+        method: "GET",
+      }),
+
+      providesTags: ["Auth"],
+    }),
+
+    ///////////////////////////////////////////////////////
+    // EMAIL VERIFY
+    ///////////////////////////////////////////////////////
+
+    verifyEmail: builder.query<{ message: string }, string>({
+      query: (token) => ({
+        url: `/api/auth/verify-email/${token}`,
+        method: "GET",
+      }),
+    }),
+    ///////////////////////////////////////////////////////
+    // FORGOT PASSWORD
+    ///////////////////////////////////////////////////////
+
+    forgotPassword: builder.mutation<
+      { message: string },
+      ForgotPasswordPayload
+    >({
+      query: (body) => ({
+        url: "/api/auth/forgot-password",
+        method: "POST",
+        data: body,
+      }),
+    }),
+
+    ///////////////////////////////////////////////////////
+    // RESET PASSWORD
+    ///////////////////////////////////////////////////////
+
+    resetPassword: builder.mutation<
+      { message: string },
+      ResetPasswordPayload
+    >({
+      query: (body) => ({
+        url: "/api/auth/reset-password",
+        method: "POST",
+        data: body,
+      }),
+    }),
+
+    ///////////////////////////////////////////////////////
+    // GOOGLE LOGIN URL
+    ///////////////////////////////////////////////////////
+
+    googleLogin: builder.query<string, void>({
+      queryFn() {
+        return {
+          data: `${import.meta.env.VITE_API_URL}/api/auth/google`,
+        };
       },
     }),
   }),
 });
 
-/* ================= EXPORT HOOKS ================= */
+///////////////////////////////////////////////////////////
+// EXPORT HOOKS
+///////////////////////////////////////////////////////////
 
 export const {
-  useMeQuery,
-  useSigninMutation,
   useSignupMutation,
-  useGoogleMutation,
+  useSigninMutation,
+  useRefreshMutation,
   useSignoutMutation,
+  useMeQuery,
+  useLazyMeQuery,
+  useForgotPasswordMutation,
+  useResetPasswordMutation,
+  useVerifyEmailQuery,
+  useGoogleLoginQuery,
 } = authApi;

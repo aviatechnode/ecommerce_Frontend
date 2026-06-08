@@ -1,15 +1,19 @@
-import { useState, useMemo } from "react";
-import type { ChangeEvent, FormEvent } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import type { ChangeEvent } from "react";
+
+// ---------- Mixed icon imports ----------
 import {
-  Pencil,
-  Trash2,
-  UploadCloud,
-  Search,
-  RefreshCw,
-  Plus,
-  X,
-  Loader2,
-} from "lucide-react";
+  FaEdit,
+  FaTrash,
+  FaSearch,
+  FaSave,
+  FaCheckCircle,
+  FaFolderOpen,
+} from "react-icons/fa";
+import { FiUploadCloud, FiImage, FiFileText } from "react-icons/fi";
+import { IoReload, IoAdd, IoClose } from "react-icons/io5";
+import { ImSpinner2 } from "react-icons/im";
+import { MdError } from "react-icons/md";
 
 import {
   useGetCategoriesQuery,
@@ -19,9 +23,9 @@ import {
   type Category,
 } from "../../services/categoryApi";
 
-/* =========================================================
-   HELPERS
-========================================================= */
+// =========================================================
+// HELPERS
+// =========================================================
 const slugify = (text: string) =>
   text
     .toLowerCase()
@@ -34,9 +38,6 @@ const generateCode = (text: string) =>
   "-" +
   Math.floor(Math.random() * 9999);
 
-/* =========================================================
-   CLOUDINARY UPLOAD
-========================================================= */
 const uploadToCloudinary = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append("file", file);
@@ -44,27 +45,20 @@ const uploadToCloudinary = async (file: File): Promise<string> => {
     "upload_preset",
     import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
   );
-
   const res = await fetch(
     `https://api.cloudinary.com/v1_1/${
       import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
     }/image/upload`,
-    {
-      method: "POST",
-      body: formData,
-    }
+    { method: "POST", body: formData }
   );
-
   const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error?.message || "Upload failed");
-  }
+  if (!res.ok) throw new Error(data.error?.message || "Upload failed");
   return data.secure_url;
 };
 
-/* =========================================================
-   FORM STATE INTERFACE
-========================================================= */
+// =========================================================
+// FORM STATE INTERFACE
+// =========================================================
 interface CategoryFormState {
   name: string;
   parentId: string | null;
@@ -85,43 +79,92 @@ const initialFormState: CategoryFormState = {
   isActive: true,
 };
 
-/* =========================================================
-   COMPONENT
-========================================================= */
-const AdminCategories = () => {
-  const [search, setSearch] = useState("");
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [formData, setFormData] = useState<CategoryFormState>(initialFormState);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+const INITIAL_VISIBLE_COUNT = 8; // Load 8 items initially
+const LOAD_MORE_COUNT = 6; // Load 6 more each time user scrolls
 
+// =========================================================
+// COMPONENT
+// =========================================================
+const AdminCategories = () => {
+  // ---------- Data fetching (all categories at once) ----------
   const {
-    data: categories = [],
+    data: allCategories = [],
     isLoading,
     isFetching,
     error,
     refetch,
   } = useGetCategoriesQuery();
 
+  // ---------- UI state ----------
+  const [search, setSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [formData, setFormData] = useState<CategoryFormState>(initialFormState);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const tableBodyRef = useRef<HTMLTableSectionElement | null>(null);
+
+  // ---------- Mutations ----------
   const [createCategory, { isLoading: creating }] = useCreateCategoryMutation();
   const [updateCategory, { isLoading: updating }] = useUpdateCategoryMutation();
   const [deleteCategory, { isLoading: deleting }] = useDeleteCategoryMutation();
 
   const isSubmitting = creating || updating;
-  const loading = isLoading || isSubmitting || deleting;
-
-  /* ---------------------------------------------------------
-     Filtered categories (search)
-  --------------------------------------------------------- */
+  
+  // ---------- Filtered categories (search applied to full list) ----------
   const filteredCategories = useMemo(() => {
-    return categories.filter((category) =>
+    if (!search.trim()) return allCategories;
+    return allCategories.filter((category) =>
       category.name.toLowerCase().includes(search.toLowerCase())
     );
-  }, [categories, search]);
+  }, [allCategories, search]);
 
-  /* ---------------------------------------------------------
-     Form helpers
-  --------------------------------------------------------- */
+  // ---------- Visible slice (incremental loading) ----------
+  const visibleCategories = useMemo(() => {
+    return filteredCategories.slice(0, visibleCount);
+  }, [filteredCategories, visibleCount]);
+
+  const hasMore = visibleCount < filteredCategories.length;
+
+  // ---------- Reset visible count when search changes ----------
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_COUNT);
+    // Scroll back to top when searching
+    if (tableBodyRef.current) {
+      tableBodyRef.current.parentElement?.parentElement?.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [search]);
+
+  // ---------- Load more categories ----------
+  const handleLoadMore = useCallback(() => {
+    if (!isFetching && hasMore) {
+      setVisibleCount((prev) => Math.min(prev + LOAD_MORE_COUNT, filteredCategories.length));
+    }
+  }, [isFetching, hasMore, filteredCategories.length]);
+
+  // ---------- Infinite scroll with Intersection Observer ----------
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isFetching) {
+          handleLoadMore();
+        }
+      },
+      { 
+        threshold: 0.1, // Trigger when 10% of sentinel is visible
+        rootMargin: "0px 0px 200px 0px" // Load 200px before reaching the end
+      }
+    );
+    
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [handleLoadMore, hasMore, isFetching]);
+
+  // ---------- Form handlers ----------
   const resetForm = () => {
     setFormData(initialFormState);
     setEditingId(null);
@@ -144,17 +187,11 @@ const AdminCategories = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const isFormValid = () => {
-    return formData.name.trim() !== "";
-  };
+  const isFormValid = () => formData.name.trim() !== "";
 
-  /* ---------------------------------------------------------
-     Image upload
-  --------------------------------------------------------- */
   const handleImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     try {
       setUploading(true);
       const imageUrl = await uploadToCloudinary(file);
@@ -166,13 +203,9 @@ const AdminCategories = () => {
     }
   };
 
-  /* ---------------------------------------------------------
-     Submit (create or update)
-  --------------------------------------------------------- */
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!isFormValid()) return;
-
     const payload = {
       name: formData.name.trim(),
       slug: slugify(formData.name),
@@ -184,7 +217,6 @@ const AdminCategories = () => {
       isActive: formData.isActive,
       parentId: formData.parentId || null,
     };
-
     try {
       if (editingId) {
         await updateCategory({ id: editingId, data: payload }).unwrap();
@@ -195,6 +227,7 @@ const AdminCategories = () => {
       }
       resetForm();
       setShowCreateForm(false);
+      setVisibleCount(INITIAL_VISIBLE_COUNT);
       refetch();
     } catch (err) {
       console.error(err);
@@ -202,9 +235,6 @@ const AdminCategories = () => {
     }
   };
 
-  /* ---------------------------------------------------------
-     Edit
-  --------------------------------------------------------- */
   const handleEdit = (category: Category) => {
     setEditingId(category.id);
     setFormData({
@@ -217,18 +247,15 @@ const AdminCategories = () => {
       isActive: category.isActive ?? true,
     });
     setShowCreateForm(true);
-    // Smooth scroll to form
     document.getElementById("category-form")?.scrollIntoView({ behavior: "smooth" });
   };
 
-  /* ---------------------------------------------------------
-     Delete
-  --------------------------------------------------------- */
   const handleDelete = async (id: string) => {
     if (!window.confirm("Delete this category? This action is permanent.")) return;
     try {
       await deleteCategory(id).unwrap();
       alert("Category deleted successfully");
+      setVisibleCount(INITIAL_VISIBLE_COUNT);
       refetch();
     } catch (err) {
       console.error(err);
@@ -236,44 +263,42 @@ const AdminCategories = () => {
     }
   };
 
-  /* ---------------------------------------------------------
-     Error message
-  --------------------------------------------------------- */
-  const errorMessage =
-    (error as any)?.data?.message ||
-    (error as any)?.error ||
-    null;
+  const errorMessage = (error as any)?.data?.message || (error as any)?.error || null;
 
-  /* ---------------------------------------------------------
-     Render
-  --------------------------------------------------------- */
+  // ---------------------------------------------------------
+  // RENDER
+  // ---------------------------------------------------------
   return (
     <div className="min-h-screen bg-linear-to-br from-gray-50 to-gray-100 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
         {/* HEADER */}
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-white p-6 shadow-sm">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-              📁 Category Management
-            </h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Organize your products with hierarchical categories.
-            </p>
+          <div className="flex items-center gap-3">
+            <FaFolderOpen className="text-green-600 text-4xl" />
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+                Category Management
+              </h1>
+              <p className="mt-1 text-sm text-gray-500">
+                Organize your products with hierarchical categories.
+              </p>
+            </div>
           </div>
           <button
             type="button"
             onClick={() => setShowCreateForm((prev) => !prev)}
             className="inline-flex items-center gap-2 rounded-xl bg-linear-to-r from-green-600 to-green-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:scale-105 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
           >
-            {showCreateForm ? <X size={18} /> : <Plus size={18} />}
+            {showCreateForm ? <IoClose size={18} /> : <IoAdd size={18} />}
             {showCreateForm ? "Close Form" : "Add Category"}
           </button>
         </div>
 
         {/* ERROR BANNER */}
         {errorMessage && (
-          <div className="rounded-2xl bg-red-50 p-4 text-red-700">
-            ❌ {errorMessage}
+          <div className="rounded-2xl bg-red-50 p-4 text-red-700 flex items-center gap-2">
+            <MdError size={20} />
+            {errorMessage}
           </div>
         )}
 
@@ -285,8 +310,9 @@ const AdminCategories = () => {
             className="space-y-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-lg transition-all lg:p-8"
           >
             <div className="border-b border-gray-200 pb-4">
-              <h2 className="text-xl font-semibold text-gray-800">
-                {editingId ? "✏️ Edit Category" : "➕ New Category"}
+              <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                {editingId ? <FaEdit size={20} /> : <IoAdd size={20} />}
+                {editingId ? "Edit Category" : "New Category"}
               </h2>
               <p className="text-sm text-gray-500">
                 {editingId
@@ -295,9 +321,9 @@ const AdminCategories = () => {
               </p>
             </div>
 
-            {/* SECTION 1: BASIC INFO */}
             <div>
-              <h3 className="mb-4 text-sm font-medium uppercase tracking-wide text-gray-500">
+              <h3 className="mb-4 text-sm font-medium uppercase tracking-wide text-gray-500 flex items-center gap-2">
+                <FiFileText size={14} />
                 Basic Information
               </h3>
               <div className="grid gap-5 md:grid-cols-2">
@@ -326,11 +352,11 @@ const AdminCategories = () => {
                     className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200"
                   >
                     <option value="">None (Top Level)</option>
-                    {categories
+                    {allCategories
                       .filter((c) => c.id !== editingId)
-                      .map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
+                      .map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
                         </option>
                       ))}
                   </select>
@@ -343,7 +369,7 @@ const AdminCategories = () => {
                     name="type"
                     value={formData.type}
                     onChange={handleInputChange}
-                    className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm focus:border-green-500 focus:ring focus:ring-green-200"
+                    className="block w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm transition focus:border-green-500 focus:ring focus:ring-green-200"
                   >
                     <option value="general">General</option>
                     <option value="engine">Engine</option>
@@ -372,10 +398,11 @@ const AdminCategories = () => {
               </div>
             </div>
 
-            {/* SECTION 2: IMAGE */}
+            {/* Image upload */}
             <div className="rounded-xl bg-gray-50 p-5">
-              <h3 className="mb-4 text-sm font-medium uppercase tracking-wide text-gray-500">
-                🖼️ Category Image
+              <h3 className="mb-4 text-sm font-medium uppercase tracking-wide text-gray-500 flex items-center gap-2">
+                <FiImage size={14} />
+                Category Image
               </h3>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-6">
                 <div className="flex-1">
@@ -383,7 +410,7 @@ const AdminCategories = () => {
                     Upload Image
                   </label>
                   <div className="flex items-center gap-3">
-                    <UploadCloud size={18} className="text-gray-400" />
+                    <FiUploadCloud size={18} className="text-gray-400" />
                     <input
                       type="file"
                       accept="image/*"
@@ -393,7 +420,7 @@ const AdminCategories = () => {
                     />
                     {uploading && (
                       <span className="inline-flex items-center gap-1 text-sm text-gray-500">
-                        <Loader2 size={14} className="animate-spin" />
+                        <ImSpinner2 size={14} className="animate-spin" />
                         Uploading...
                       </span>
                     )}
@@ -412,10 +439,11 @@ const AdminCategories = () => {
               </div>
             </div>
 
-            {/* SECTION 3: DESCRIPTION & STATUS */}
+            {/* Additional Info */}
             <div>
-              <h3 className="mb-4 text-sm font-medium uppercase tracking-wide text-gray-500">
-                📝 Additional Info
+              <h3 className="mb-4 text-sm font-medium uppercase tracking-wide text-gray-500 flex items-center gap-2">
+                <FiFileText size={14} />
+                Additional Info
               </h3>
               <div className="space-y-5">
                 <div>
@@ -446,15 +474,25 @@ const AdminCategories = () => {
               </div>
             </div>
 
-            {/* FORM ACTIONS */}
+            {/* Form Buttons */}
             <div className="flex flex-wrap gap-4 pt-4">
               <button
                 type="submit"
                 disabled={!isFormValid() || isSubmitting || uploading}
                 className="inline-flex items-center gap-2 rounded-xl bg-green-600 px-6 py-2.5 font-semibold text-white shadow-sm transition hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50"
               >
-                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                {editingId ? "✅ Update Category" : "💾 Save Category"}
+                {isSubmitting && <ImSpinner2 className="h-4 w-4 animate-spin" />}
+                {editingId ? (
+                  <>
+                    <FaCheckCircle size={16} />
+                    Update Category
+                  </>
+                ) : (
+                  <>
+                    <FaSave size={16} />
+                    Save Category
+                  </>
+                )}
               </button>
               <button
                 type="button"
@@ -467,11 +505,11 @@ const AdminCategories = () => {
           </form>
         )}
 
-        {/* ACTION BAR & FILTERS */}
+        {/* ACTION BAR */}
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-white p-4 shadow-sm">
           <div className="flex flex-1 flex-wrap gap-3">
             <div className="relative flex-1 min-w-50">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <FaSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search categories..."
@@ -482,15 +520,23 @@ const AdminCategories = () => {
             </div>
             <button
               type="button"
-              onClick={() => refetch()}
+              onClick={() => {
+                setVisibleCount(INITIAL_VISIBLE_COUNT);
+                refetch();
+              }}
               className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium shadow-sm transition hover:bg-gray-50"
             >
-              <RefreshCw size={16} />
+              <IoReload size={16} />
               Refresh
             </button>
           </div>
-          <div className="text-sm text-gray-500">
-            {isFetching && "🔄 Updating..."}
+          <div className="text-sm text-gray-500 flex items-center gap-1">
+            {isFetching && (
+              <>
+                <ImSpinner2 className="h-4 w-4 animate-spin" />
+                Updating...
+              </>
+            )}
           </div>
         </div>
 
@@ -517,81 +563,107 @@ const AdminCategories = () => {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 bg-white">
-                {loading && (
+              <tbody ref={tableBodyRef} className="divide-y divide-gray-100 bg-white">
+                {isLoading && !allCategories.length ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-10 text-center text-gray-500">
-                      <div className="flex justify-center">
-                        <Loader2 className="h-6 w-6 animate-spin text-green-600" />
-                        <span className="ml-2">Loading categories...</span>
+                      <div className="flex justify-center items-center gap-2">
+                        <ImSpinner2 className="h-6 w-6 animate-spin text-green-600" />
+                        <span>Loading categories...</span>
                       </div>
                     </td>
                   </tr>
-                )}
-                {!loading && filteredCategories.length === 0 && (
+                ) : visibleCategories.length === 0 && !isLoading ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-10 text-center text-gray-500">
-                      📂 No categories found. {search ? "Try a different search term." : "Create your first category above."}
+                      <div className="flex justify-center items-center gap-2">
+                        <FaFolderOpen size={20} />
+                        No categories found.{" "}
+                        {search ? "Try a different search term." : "Create your first category above."}
+                      </div>
                     </td>
                   </tr>
+                ) : (
+                  <>
+                    {visibleCategories.map((category) => {
+                      const parent = allCategories.find((c) => c.id === category.parentId);
+                      return (
+                        <tr key={category.id} className="transition hover:bg-gray-50">
+                          <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                            {category.name}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                            <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
+                              {category.type}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                            {parent?.name || "—"}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                            {category._count?.products || 0}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(category)}
+                              className="mr-2 inline-flex items-center gap-1 rounded-md px-3 py-1 text-blue-600 transition hover:bg-blue-50 hover:text-blue-800"
+                              title="Edit"
+                            >
+                              <FaEdit size={16} />
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(category.id)}
+                              disabled={deleting}
+                              className="inline-flex items-center gap-1 rounded-md px-3 py-1 text-red-600 transition hover:bg-red-50 hover:text-red-800 disabled:opacity-50"
+                              title="Delete"
+                            >
+                              <FaTrash size={16} />
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </>
                 )}
-                {!loading &&
-                  filteredCategories.map((category) => {
-                    const parent = categories.find((c) => c.id === category.parentId);
-                    return (
-                      <tr key={category.id} className="transition hover:bg-gray-50">
-                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
-                          {category.name}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                          <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">
-                            {category.type}
-                          </span>
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                          {parent?.name || "—"}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
-                          {category._count?.products || 0}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(category)}
-                            className="mr-2 inline-flex items-center gap-1 rounded-md px-3 py-1 text-blue-600 transition hover:bg-blue-50 hover:text-blue-800"
-                            title="Edit"
-                          >
-                            <Pencil size={16} />
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(category.id)}
-                            disabled={deleting}
-                            className="inline-flex items-center gap-1 rounded-md px-3 py-1 text-red-600 transition hover:bg-red-50 hover:text-red-800 disabled:opacity-50"
-                            title="Delete"
-                          >
-                            <Trash2 size={16} />
-                            Delete
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
               </tbody>
             </table>
           </div>
+          
+          {/* Infinite Scroll Sentinel */}
+          {hasMore && !isLoading && (
+            <div ref={sentinelRef} className="px-6 py-4 text-center border-t border-gray-100">
+              {isFetching ? (
+                <div className="flex justify-center items-center gap-2 text-gray-500">
+                  <ImSpinner2 className="h-5 w-5 animate-spin text-green-600" />
+                  <span className="text-sm">Loading more categories...</span>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-400 py-2">
+                  Scroll down to load more categories
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Show message when all categories are loaded */}
+          {!hasMore && visibleCategories.length > 0 && filteredCategories.length > INITIAL_VISIBLE_COUNT && (
+            <div className="px-6 py-3 text-center border-t border-gray-100">
+              <p className="text-xs text-gray-400">
+                ✓ Loaded all {filteredCategories.length} categories
+              </p>
+            </div>
+          )}
         </div>
 
         {/* FOOTER SUMMARY */}
-        <div className="rounded-2xl bg-white p-4 text-center text-sm text-gray-500 shadow-sm">
-          🗂️ Total categories:{" "}
-          <span className="font-semibold">{filteredCategories.length}</span>
-          {search && filteredCategories.length !== categories.length && (
-            <span className="ml-2 text-gray-400">
-              (filtered from {categories.length})
-            </span>
-          )}
+        <div className="rounded-2xl bg-white p-4 text-center text-sm text-gray-500 shadow-sm flex items-center justify-center gap-2">
+          <FaFolderOpen size={16} />
+          Showing {visibleCategories.length} of {filteredCategories.length} categories
+          {hasMore && " — Scroll down to load more"}
         </div>
       </div>
     </div>

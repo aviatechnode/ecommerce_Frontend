@@ -10,20 +10,27 @@ import {
   Sun,
   Moon,
 } from "lucide-react";
-import { useAuthStore } from "../../store/AuthStore";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useGetSidebarQuery } from "../../services/adminApi";
+import { authApi, useMeQuery, useSignoutMutation } from "../../services/authApi";
+import { useDispatch } from "react-redux";
 
 export default function AdminNavbar() {
-  const { user, signout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const dispatch = useDispatch();
+
+  // RTK Query hooks
+  const { data: authData, isLoading: isAuthLoading } = useMeQuery();
+  const [signout, { isLoading: isSignoutLoading }] = useSignoutMutation();
 
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Current user from API
+  const user = authData?.user;
 
   /**
    * Fetch sidebar data so navbar title always matches
@@ -77,13 +84,11 @@ export default function AdminNavbar() {
 
   const handleLogout = async () => {
     try {
-      setLoading(true);
-      await signout();
+      await signout().unwrap();
+      dispatch(authApi.util.resetApiState());
       navigate("/");
     } catch (error) {
       console.error("Logout failed:", error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -111,22 +116,32 @@ export default function AdminNavbar() {
     };
   }, []);
 
+  // Show nothing while auth is loading (prevents flash)
+  if (isAuthLoading) {
+    return null;
+  }
+
+  // If no user, don't render navbar (should be protected by route anyway)
+  if (!user) {
+    return null;
+  }
+
   const initials =
-    user?.name
+    user.name
       ?.split(" ")
       .map((n) => n[0])
       .join("")
       .toUpperCase() || "A";
 
   const roleLabel =
-    user?.isSuperAdmin
+    user.roleName === "SUPER_ADMIN"
       ? "Super Admin"
-      : user?.roleName || "Admin";
+      : user.roleName || "Admin";
 
   /**
    * Generate avatar gradient from user email
    */
-  const avatarGradient = user?.email
+  const avatarGradient = user.email
     ? `linear-gradient(
         135deg,
         #${user.email.charCodeAt(0).toString(16).slice(0, 6)},
@@ -198,7 +213,7 @@ export default function AdminNavbar() {
               {/* User Info */}
               <div className="hidden text-left lg:block">
                 <p className="text-sm font-semibold leading-tight text-gray-900 dark:text-white">
-                  {user?.name || "Admin User"}
+                  {user.name || "Admin User"}
                 </p>
 
                 <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
@@ -226,7 +241,7 @@ export default function AdminNavbar() {
                     </p>
 
                     <p className="mt-0.5 truncate text-sm font-medium text-gray-900 dark:text-white">
-                      {user?.email}
+                      {user.email}
                     </p>
                   </div>
 
@@ -264,12 +279,12 @@ export default function AdminNavbar() {
 
                     <button
                       onClick={handleLogout}
-                      disabled={loading}
+                      disabled={isSignoutLoading}
                       className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/50"
                     >
                       <LogOut size={16} />
 
-                      {loading ? (
+                      {isSignoutLoading ? (
                         <span className="flex items-center gap-2">
                           <span className="h-3 w-3 animate-spin rounded-full border-2 border-red-600 border-t-transparent"></span>
                           Logging out...

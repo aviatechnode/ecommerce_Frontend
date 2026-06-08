@@ -165,12 +165,13 @@ export function sanitizeProductForApi(values: CreateProductFormValues): CreatePr
         quantityRequired: fit.quantityRequired ? Number(fit.quantityRequired) : undefined,
         isUniversal: fit.isUniversal ?? false,
       })),
+    // FIXED: Use array index as position to guarantee uniqueness per product
     medias: (values.medias || [])
       .filter((media) => media.url?.trim())
-      .map(({ url, type, position }) => ({
+      .map(({ url, type }, idx) => ({
         url: url.trim(),
         type: type || "IMAGE",
-        position: position ?? 0,
+        position: idx,
       })),
     variants: (values.variants || [])
       .map(cleanVariant)

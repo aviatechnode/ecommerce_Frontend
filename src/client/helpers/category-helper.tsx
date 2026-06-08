@@ -132,7 +132,7 @@ export const transformCategoriesToNavbar = (
 
       return {
         title: config.title,
-        icon: <Icon size={16} className="text-gray-600" />,
+        icon: <Icon size={16} className="text-emerald-100" />,
         items: uniqueItems,
       };
     });

@@ -15,7 +15,6 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-
 import { useCreateFeedbackMutation } from "../../services/feedbackApi";
 
 /* =========================================================
@@ -207,56 +206,70 @@ export default function Feedback() {
       )}
 
       <div className="max-w-7xl mx-auto">
-        {/* HEADER */}
-      
-<div className="mb-10 rounded-3xl bg-white p-8">
-  <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-    {/* Left Content */}
-    <div className="max-w-2xl">
-      <h1 className="text-3xl font-bold tracking-tight text-green-700 sm:text-4xl">
-        Contact MOgrace Autoparts
-      </h1>
+        {/* HEADER WITH BACKGROUND IMAGE */}
+        <section className="relative mb-10 rounded-3xl overflow-hidden">
+          {/* Background image container */}
+          <div
+            className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage:
+                "url('/oilfilter2.jpeg')",
+            }}
+          ></div>
+          {/* Optional dark overlay for better text readability */}
+          <div className="absolute inset-0 z-10 bg-black/40"></div>
 
-      <p className="mt-3 text-base leading-7 text-gray-600">
-        Have questions about parts availability, pricing, or finding the right
-        fit for your vehicle? Our team is ready to help with fast support and
-        reliable service. Reach out through the form below or contact us
-        directly.
-      </p>
-    </div>
+          {/* Content on top of image */}
+          <div className="relative z-20 p-8 md:p-10">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              {/* Left Content */}
+              <div className="max-w-2xl text-white">
+                <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+                  Contact MOgrace Autoparts
+                </h1>
 
-    {/* Contact Quick Actions */}
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
-        <Phone className="h-5 w-5 text-gray-700" />
-        <span className="text-sm font-medium text-gray-700">
-          Quick Support
-        </span>
-      </div>
+                <p className="mt-3 text-base leading-7 text-gray-100">
+                  Have questions about parts availability, pricing, or finding the right
+                  fit for your vehicle? Our team is ready to help with fast support and
+                  reliable service. Reach out through the form below or contact us
+                  directly.
+                </p>
+              </div>
 
-      <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
-        <Truck className="h-5 w-5 text-gray-700" />
-        <span className="text-sm font-medium text-gray-700">
-          Delivery Help
-        </span>
-      </div>
+              {/* Contact Quick Actions - subtle background for readability */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex items-center gap-3 rounded-2xl bg-white/90 backdrop-blur-sm px-4 py-3 shadow-sm">
+                  <Phone className="h-5 w-5 text-gray-700" />
+                  <span className="text-sm font-medium text-gray-700">
+                    Quick Support
+                  </span>
+                </div>
 
-      <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
-        <Wrench className="h-5 w-5 text-gray-700" />
-        <span className="text-sm font-medium text-gray-700">
-          Auto Parts Advice
-        </span>
-      </div>
+                <div className="flex items-center gap-3 rounded-2xl bg-white/90 backdrop-blur-sm px-4 py-3 shadow-sm">
+                  <Truck className="h-5 w-5 text-gray-700" />
+                  <span className="text-sm font-medium text-gray-700">
+                    Delivery Help
+                  </span>
+                </div>
 
-      <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3">
-        <ShieldCheck className="h-5 w-5 text-gray-700" />
-        <span className="text-sm font-medium text-gray-700">
-          Trusted Quality
-        </span>
-      </div>
-    </div>
-  </div>
-</div>
+                <div className="flex items-center gap-3 rounded-2xl bg-white/90 backdrop-blur-sm px-4 py-3 shadow-sm">
+                  <Wrench className="h-5 w-5 text-gray-700" />
+                  <span className="text-sm font-medium text-gray-700">
+                    Auto Parts Advice
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3 rounded-2xl bg-white/90 backdrop-blur-sm px-4 py-3 shadow-sm">
+                  <ShieldCheck className="h-5 w-5 text-gray-700" />
+                  <span className="text-sm font-medium text-gray-700">
+                    Trusted Quality
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* CONTACT CARDS */}
           <div className="space-y-6">

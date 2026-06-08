@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   User,
   MapPin,
@@ -19,6 +20,7 @@ import {
   CreditCard,
   Globe,
   Moon,
+  Mail,
 } from "lucide-react";
 
 import {
@@ -37,10 +39,14 @@ import {
 } from "../../services/addressApi";
 
 import { useGetCartQuery } from "../../services/cartApi";
+import {
+  useGetStatesQuery,
+  useGetLgasByStateQuery,
+} from "../../services/locationApi";
 
 type Tab = "overview" | "addresses" | "orders" | "settings";
 
-// Modern navigation items with descriptions
+// Navigation items
 const NAVIGATION_ITEMS = [
   { id: "overview" as const, label: "Overview", icon: User, description: "View your profile stats" },
   { id: "addresses" as const, label: "Addresses", icon: MapPin, description: "Manage delivery locations" },
@@ -48,35 +54,52 @@ const NAVIGATION_ITEMS = [
   { id: "settings" as const, label: "Settings", icon: Settings, description: "Customize preferences" },
 ];
 
-// Mock data - replace with actual API calls
-const MOCK_STATES: State[] = [
-  { id: "1", name: "Lagos" },
-  { id: "2", name: "Abuja" },
-  { id: "3", name: "Rivers" },
-];
+// ============================================
+// ADDRESS ACTIONS HOOK
+// ============================================
+const useAddressActions = () => {
+  const [deleteAddress, { isLoading: isDeleting }] = useDeleteAddressMutation();
+  const [setDefaultAddress, { isLoading: isSettingDefault }] = useSetDefaultAddressMutation();
+  const { refetch } = useGetMyAddressesQuery();
 
-const MOCK_LGAS: LGA[] = [
-  { id: "1", name: "Ikeja", stateId: "1" },
-  { id: "2", name: "Victoria Island", stateId: "1" },
-  { id: "3", name: "Abuja Municipal", stateId: "2" },
-  { id: "4", name: "Port Harcourt", stateId: "3" },
-];
+  const handleDelete = useCallback(
+    async (id: string) => {
+      if (!window.confirm("Are you sure you want to delete this address?")) return;
+      try {
+        await deleteAddress(id).unwrap();
+        await refetch();
+      } catch (error) {
+        console.error("Failed to delete address:", error);
+        throw error;
+      }
+    },
+    [deleteAddress, refetch]
+  );
 
-interface State {
-  id: string;
-  name: string;
-}
+  const handleSetDefault = useCallback(
+    async (id: string) => {
+      try {
+        await setDefaultAddress(id).unwrap();
+        await refetch();
+      } catch (error) {
+        console.error("Failed to set default address:", error);
+        throw error;
+      }
+    },
+    [setDefaultAddress, refetch]
+  );
 
-interface LGA {
-  id: string;
-  name: string;
-  stateId: string;
-}
+  return {
+    handleDelete,
+    handleSetDefault,
+    isDeleting,
+    isSettingDefault,
+  };
+};
 
 // ============================================
-// MODERN ADDRESS FORM COMPONENT
+// ADDRESS FORM MODAL
 // ============================================
-
 interface AddressFormData {
   name: string;
   phone: string;
@@ -104,6 +127,9 @@ const AddressFormModal = ({
 }: AddressFormModalProps) => {
   const [createAddress, { isLoading: isCreating }] = useCreateAddressMutation();
   const [updateAddress, { isLoading: isUpdating }] = useUpdateAddressMutation();
+
+  // Fetch real states from API
+  const { data: states = [], isLoading: isLoadingStates } = useGetStatesQuery();
   
   const [formData, setFormData] = useState<AddressFormData>({
     name: "",
@@ -119,10 +145,11 @@ const AddressFormModal = ({
 
   const [errors, setErrors] = useState<Partial<Record<keyof AddressFormData, string>>>({});
 
-  const availableLGAs = useMemo(() => {
-    if (!formData.stateId) return [];
-    return MOCK_LGAS.filter(lga => lga.stateId === formData.stateId);
-  }, [formData.stateId]);
+  // Fetch LGAs based on selected state
+  const { data: availableLGAs = [], isLoading: isLoadingLGAs } = useGetLgasByStateQuery(
+    formData.stateId,
+    { skip: !formData.stateId }
+  );
 
   useEffect(() => {
     if (editingAddress) {
@@ -155,18 +182,18 @@ const AddressFormModal = ({
 
   const validateForm = (): boolean => {
     const newErrors: Partial<Record<keyof AddressFormData, string>> = {};
-    
+
     if (!formData.name.trim()) newErrors.name = "Full name is required";
     if (!formData.phone.trim()) newErrors.phone = "Phone number is required";
     if (!formData.stateId) newErrors.stateId = "Please select a state";
     if (!formData.lgaId) newErrors.lgaId = "Please select an LGA";
     if (!formData.city.trim()) newErrors.city = "City is required";
     if (!formData.street.trim()) newErrors.street = "Street address is required";
-    
+
     if (formData.phone && !/^[\d+\s-]{8,15}$/.test(formData.phone)) {
       newErrors.phone = "Invalid phone number format";
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -219,7 +246,7 @@ const AddressFormModal = ({
   const handleChange = (field: keyof AddressFormData, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: undefined }));
-    
+
     if (field === "stateId") {
       setFormData(prev => ({ ...prev, lgaId: "" }));
     }
@@ -227,18 +254,18 @@ const AddressFormModal = ({
 
   if (!isOpen) return null;
 
-  const isLoading = isCreating || isUpdating;
+  const isLoading = isCreating || isUpdating || isLoadingStates;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-screen items-center justify-center p-4">
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
-        
+
         <div className="relative w-full max-w-2xl rounded-2xl bg-white shadow-2xl transform transition-all duration-300 scale-100 opacity-100 animate-in slide-in-from-bottom-4">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-100">
             <div>
-              <h2 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+              <h2 className="text-xl font-bold bg-linear-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
                 {editingAddress ? "Edit Address" : "Add New Address"}
               </h2>
               <p className="text-sm text-gray-500 mt-1">
@@ -265,7 +292,7 @@ const AddressFormModal = ({
                     type="text"
                     value={formData.name}
                     onChange={(e) => handleChange("name", e.target.value)}
-                    className={`w-full rounded-xl border-2 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                    className={`w-full rounded-xl border-2 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all ${
                       errors.name ? "border-red-300 bg-red-50" : "border-gray-200 hover:border-gray-300"
                     }`}
                     placeholder="Recipient full name"
@@ -283,7 +310,7 @@ const AddressFormModal = ({
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => handleChange("phone", e.target.value)}
-                    className={`w-full rounded-xl border-2 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                    className={`w-full rounded-xl border-2 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all ${
                       errors.phone ? "border-red-300 bg-red-50" : "border-gray-200 hover:border-gray-300"
                     }`}
                     placeholder="Phone number for delivery"
@@ -302,12 +329,13 @@ const AddressFormModal = ({
                   <select
                     value={formData.stateId}
                     onChange={(e) => handleChange("stateId", e.target.value)}
-                    className={`w-full rounded-xl border-2 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                    className={`w-full rounded-xl border-2 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all ${
                       errors.stateId ? "border-red-300 bg-red-50" : "border-gray-200 hover:border-gray-300"
                     }`}
+                    disabled={isLoadingStates}
                   >
                     <option value="">Select State</option>
-                    {MOCK_STATES.map(state => (
+                    {states.map(state => (
                       <option key={state.id} value={state.id}>{state.name}</option>
                     ))}
                   </select>
@@ -323,8 +351,8 @@ const AddressFormModal = ({
                   <select
                     value={formData.lgaId}
                     onChange={(e) => handleChange("lgaId", e.target.value)}
-                    disabled={!formData.stateId}
-                    className={`w-full rounded-xl border-2 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all disabled:bg-gray-100 disabled:cursor-not-allowed ${
+                    disabled={!formData.stateId || isLoadingLGAs}
+                    className={`w-full rounded-xl border-2 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all disabled:bg-gray-100 disabled:cursor-not-allowed ${
                       errors.lgaId ? "border-red-300 bg-red-50" : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
@@ -348,7 +376,7 @@ const AddressFormModal = ({
                     type="text"
                     value={formData.city}
                     onChange={(e) => handleChange("city", e.target.value)}
-                    className={`w-full rounded-xl border-2 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                    className={`w-full rounded-xl border-2 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all ${
                       errors.city ? "border-red-300 bg-red-50" : "border-gray-200 hover:border-gray-300"
                     }`}
                     placeholder="City or town name"
@@ -366,7 +394,7 @@ const AddressFormModal = ({
                     type="text"
                     value={formData.area}
                     onChange={(e) => handleChange("area", e.target.value)}
-                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all hover:border-gray-300"
+                    className="w-full rounded-xl border-2 border-gray-200 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all hover:border-gray-300"
                     placeholder="Neighborhood or area"
                   />
                 </div>
@@ -380,7 +408,7 @@ const AddressFormModal = ({
                   type="text"
                   value={formData.street}
                   onChange={(e) => handleChange("street", e.target.value)}
-                  className={`w-full rounded-xl border-2 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
+                  className={`w-full rounded-xl border-2 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all ${
                     errors.street ? "border-red-300 bg-red-50" : "border-gray-200 hover:border-gray-300"
                   }`}
                   placeholder="House number, street name"
@@ -398,18 +426,18 @@ const AddressFormModal = ({
                   type="text"
                   value={formData.landmark}
                   onChange={(e) => handleChange("landmark", e.target.value)}
-                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all hover:border-gray-300"
+                  className="w-full rounded-xl border-2 border-gray-200 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all hover:border-gray-300"
                   placeholder="Nearby landmark (e.g., opposite mall)"
                 />
               </div>
 
-              <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-xl">
+              <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-xl">
                 <input
                   type="checkbox"
                   id="isDefault"
                   checked={formData.isDefault}
                   onChange={(e) => handleChange("isDefault", e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                 />
                 <label htmlFor="isDefault" className="text-sm text-gray-700 font-medium">
                   Set as default address
@@ -429,7 +457,7 @@ const AddressFormModal = ({
               <button
                 type="submit"
                 disabled={isLoading}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 hover:shadow-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-xl bg-linear-to-r from-emerald-600 to-emerald-700 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-200 hover:shadow-xl hover:from-emerald-700 hover:to-emerald-800 transition-all duration-200 disabled:opacity-50"
               >
                 {isLoading && <Loader2 size={16} className="animate-spin" />}
                 {editingAddress ? "Update Address" : "Save Address"}
@@ -443,9 +471,8 @@ const AddressFormModal = ({
 };
 
 // ============================================
-// MODERN ADDRESS CARD COMPONENT
+// ADDRESS CARD COMPONENT
 // ============================================
-
 const AddressCard = ({
   address,
   onEdit,
@@ -490,17 +517,17 @@ const AddressCard = ({
           <div className="flex items-center gap-2 flex-wrap mb-2">
             <span className="font-bold text-gray-900 text-lg">{address.name}</span>
             {address.isDefault && (
-              <span className="inline-flex items-center gap-1 text-xs bg-gradient-to-r from-green-50 to-emerald-50 text-green-700 px-3 py-1 rounded-full font-semibold">
+              <span className="inline-flex items-center gap-1 text-xs bg-linear-to-r from-emerald-50 to-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-semibold">
                 <Star size={12} fill="currentColor" />
                 Default
               </span>
             )}
           </div>
-          
+
           <div className="text-gray-600 leading-relaxed mb-3">
             {address.fullAddress}
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <Phone size={14} />
@@ -557,9 +584,8 @@ const AddressCard = ({
 };
 
 // ============================================
-// MODERN STAT CARD COMPONENT
+// STAT CARD
 // ============================================
-
 const StatCard = ({ label, value, icon: Icon, trend }: { label: string; value: number; icon: any; trend?: string }) => (
   <div className="group relative bg-white rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border border-gray-100">
     <div className="flex items-start justify-between">
@@ -567,24 +593,23 @@ const StatCard = ({ label, value, icon: Icon, trend }: { label: string; value: n
         <p className="text-sm text-gray-500 font-medium mb-2">{label}</p>
         <p className="text-3xl font-bold text-gray-900">{value}</p>
         {trend && (
-          <p className="text-xs text-green-600 mt-2 font-medium">{trend}</p>
+          <p className="text-xs text-emerald-600 mt-2 font-medium">{trend}</p>
         )}
       </div>
-      <div className="p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl group-hover:scale-110 transition-transform duration-200">
-        <Icon size={24} className="text-blue-600" />
+      <div className="p-3 bg-linear-to-br from-emerald-50 to-emerald-50 rounded-2xl group-hover:scale-110 transition-transform duration-200">
+        <Icon size={24} className="text-emerald-600" />
       </div>
     </div>
   </div>
 );
 
 // ============================================
-// MODERN INFO ROW COMPONENT
+// INFO ROW
 // ============================================
-
 const InfoRow = ({ label, value, icon: Icon }: { label: string; value: string; icon: any }) => (
   <div className="flex items-center py-4 border-b border-gray-100 last:border-0 group hover:bg-gray-50/50 px-4 -mx-4 rounded-xl transition-all">
     <div className="w-12">
-      <Icon size={18} className="text-gray-400 group-hover:text-blue-600 transition-colors" />
+      <Icon size={18} className="text-gray-400 group-hover:text-emerald-600 transition-colors" />
     </div>
     <div className="flex-1">
       <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</p>
@@ -595,28 +620,77 @@ const InfoRow = ({ label, value, icon: Icon }: { label: string; value: string; i
 );
 
 // ============================================
-// LOADING SKELETON
+// SKELETON LOADER
 // ============================================
-
 const ProfileSkeleton = () => (
-  <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+  <div className="min-h-screen bg-linear-to-br from-gray-50 to-gray-100">
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
       <div className="animate-pulse">
-        <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
+        <div className="bg-white rounded-2xl shadow-sm p-6 mb-6 border border-gray-100">
           <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-full bg-gradient-to-br from-gray-200 to-gray-300" />
-            <div className="flex-1">
-              <div className="h-6 w-48 bg-gray-200 rounded-lg mb-2" />
+            <div className="h-16 w-16 rounded-full bg-gray-200" />
+            <div className="flex-1 space-y-2">
+              <div className="h-6 w-48 bg-gray-200 rounded-lg" />
               <div className="h-4 w-64 bg-gray-200 rounded" />
             </div>
           </div>
         </div>
+
         <div className="grid grid-cols-12 gap-6">
-          <div className="col-span-3">
-            <div className="h-96 bg-white rounded-2xl shadow-sm" />
+          <div className="col-span-12 lg:col-span-3">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="flex items-center gap-3 px-5 py-4 border-b border-gray-100">
+                  <div className="h-5 w-5 bg-gray-200 rounded" />
+                  <div className="flex-1">
+                    <div className="h-4 w-24 bg-gray-200 rounded mb-1" />
+                    <div className="h-3 w-32 bg-gray-200 rounded" />
+                  </div>
+                </div>
+              ))}
+              <div className="border-t border-gray-100 mt-2 pt-2">
+                <div className="flex items-center gap-3 px-5 py-4">
+                  <div className="h-5 w-5 bg-gray-200 rounded" />
+                  <div className="h-4 w-20 bg-gray-200 rounded" />
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="col-span-9">
-            <div className="h-96 bg-white rounded-2xl shadow-sm" />
+
+          <div className="col-span-12 lg:col-span-9 space-y-6">
+            <div className="grid sm:grid-cols-3 gap-5">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-2">
+                      <div className="h-4 w-20 bg-gray-200 rounded" />
+                      <div className="h-8 w-12 bg-gray-200 rounded" />
+                    </div>
+                    <div className="h-12 w-12 bg-gray-200 rounded-2xl" />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-5 border-b border-gray-100 bg-gray-50/30">
+                <div className="h-5 w-32 bg-gray-200 rounded mb-1" />
+                <div className="h-4 w-48 bg-gray-200 rounded" />
+              </div>
+              <div className="p-6 space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="flex items-center py-4 border-b border-gray-100 last:border-0">
+                    <div className="w-12">
+                      <div className="h-5 w-5 bg-gray-200 rounded" />
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <div className="h-3 w-16 bg-gray-200 rounded" />
+                      <div className="h-4 w-40 bg-gray-200 rounded" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -627,9 +701,8 @@ const ProfileSkeleton = () => (
 // ============================================
 // ERROR STATE
 // ============================================
-
 const ErrorState = ({ message, onRetry }: { message: string; onRetry?: () => void }) => (
-  <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100">
+  <div className="min-h-screen flex flex-col items-center justify-center bg-linear-to-br from-gray-50 to-gray-100">
     <div className="text-center max-w-md">
       <div className="bg-red-50 rounded-full p-4 w-20 h-20 mx-auto mb-6">
         <X size={48} className="text-red-600 mx-auto" />
@@ -639,7 +712,7 @@ const ErrorState = ({ message, onRetry }: { message: string; onRetry?: () => voi
       {onRetry && (
         <button
           onClick={onRetry}
-          className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold shadow-lg shadow-blue-200 hover:shadow-xl transition-all"
+          className="px-6 py-3 bg-linear-to-r from-emerald-600 to-emerald-700 text-white rounded-xl font-semibold shadow-lg shadow-emerald-200 hover:shadow-xl transition-all"
         >
           Try Again
         </button>
@@ -651,20 +724,42 @@ const ErrorState = ({ message, onRetry }: { message: string; onRetry?: () => voi
 // ============================================
 // MAIN COMPONENT
 // ============================================
-
 export default function CustomerProfilePage() {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [editingAddress, setEditingAddress] = useState<any>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Fetch user data
+  const { data: meData, isLoading: isUserLoading, error: userError, refetch: refetchUser } = useMeQuery();
+  const user = meData?.user;
 
-  const { data: user, isLoading: isUserLoading, error: userError, refetch: refetchUser } = useMeQuery();
+  // Fetch addresses
   const { data: addressData, isLoading: isAddressesLoading, error: addressesError, refetch: refetchAddresses } = useGetMyAddressesQuery();
+  
+  // Fetch cart
   const { data: cartData, isLoading: isCartLoading, error: cartError } = useGetCartQuery();
+  
+  // Auth actions
   const [signout, { isLoading: isSigningOut }] = useSignoutMutation();
+  
+  // Address actions
   const { handleDelete, handleSetDefault, isDeleting, isSettingDefault } = useAddressActions();
 
   const addresses = useMemo(() => addressData?.addresses ?? [], [addressData]);
   const isLoading = isUserLoading || isAddressesLoading || isCartLoading;
+
+  // Sync active tab with URL query parameter
+  useEffect(() => {
+    const tabParam = searchParams.get("tab") as Tab;
+    if (tabParam && ["overview", "addresses", "orders", "settings"].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tab: Tab) => {
+    setActiveTab(tab);
+    setSearchParams({ tab });
+  };
 
   const handleLogout = useCallback(async () => {
     try {
@@ -709,19 +804,19 @@ export default function CustomerProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="min-h-screen bg-linear-to-br from-gray-50 to-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         {/* Header Section */}
         <div className="bg-white rounded-2xl shadow-sm p-6 mb-6 border border-gray-100">
           <div className="flex items-center gap-4">
             <div className="relative">
-              <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg">
+              <div className="h-16 w-16 rounded-full bg-linear-to-br from-emerald-600 to-emerald-600 flex items-center justify-center shadow-lg">
                 <span className="font-bold text-xl text-white">
                   {user.name?.charAt(0).toUpperCase()}
                 </span>
               </div>
-              <div className="absolute -bottom-1 -right-1 bg-green-500 rounded-full p-1 border-2 border-white">
-                <div className="w-2 h-2 rounded-full bg-green-500" />
+              <div className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full p-1 border-2 border-white">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" />
               </div>
             </div>
             <div>
@@ -734,7 +829,7 @@ export default function CustomerProfilePage() {
         <div className="grid grid-cols-12 gap-6">
           {/* Sidebar Navigation */}
           <aside className="col-span-12 lg:col-span-3">
-            <nav className="bg-white rounded-2xl shadow-sm overflow-hidden sticky top-6 border border-gray-100">
+            <nav className="bg-white rounded-2xl shadow-sm overflow-hidden sticky top-32 border border-gray-100">
               {NAVIGATION_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
@@ -742,23 +837,23 @@ export default function CustomerProfilePage() {
                 return (
                   <button
                     key={item.id}
-                    onClick={() => setActiveTab(item.id)}
+                    onClick={() => handleTabChange(item.id)}
                     className={`
                       w-full flex items-center gap-3 px-5 py-4 text-left
                       transition-all duration-200 relative
                       ${isActive
-                        ? "bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 font-semibold"
+                        ? "bg-linear-to-r from-emerald-50 to-emerald-50 text-emerald-700 font-semibold"
                         : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                       }
                     `}
                   >
-                    <Icon size={20} className={isActive ? "text-blue-600" : ""} />
+                    <Icon size={20} className={isActive ? "text-emerald-600" : ""} />
                     <div className="flex-1">
                       <div className="text-sm font-medium">{item.label}</div>
                       <div className="text-xs text-gray-400 mt-0.5">{item.description}</div>
                     </div>
                     {isActive && (
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-600 to-indigo-600 rounded-r-full" />
+                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-linear-to-b from-emerald-600 to-emerald-600 rounded-r-full" />
                     )}
                   </button>
                 );
@@ -781,16 +876,14 @@ export default function CustomerProfilePage() {
           <main className="col-span-12 lg:col-span-9">
             {activeTab === "overview" && (
               <div className="space-y-6">
-                {/* Stats Grid */}
                 <div className="grid sm:grid-cols-3 gap-5">
                   <StatCard label="Total Orders" value={0} icon={Package} trend="+0% from last month" />
                   <StatCard label="Addresses" value={addresses.length} icon={MapPin} />
                   <StatCard label="Cart Items" value={cartData?.totals?.totalItems ?? 0} icon={ShoppingBag} />
                 </div>
 
-                {/* Profile Information */}
                 <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                  <div className="px-6 py-5 border-b border-gray-100 bg-linear-to-r from-gray-50 to-white">
                     <h2 className="font-bold text-gray-900">Profile Information</h2>
                     <p className="text-sm text-gray-500 mt-1">Your personal details and account settings</p>
                   </div>
@@ -805,14 +898,14 @@ export default function CustomerProfilePage() {
 
             {activeTab === "addresses" && (
               <section className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-linear-to-r from-gray-50 to-white">
                   <div>
                     <h2 className="font-bold text-gray-900">My Addresses</h2>
                     <p className="text-sm text-gray-500 mt-1">Manage your delivery locations ({addresses.length})</p>
                   </div>
                   <button
                     onClick={handleAddAddress}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold shadow-lg shadow-blue-200 hover:shadow-xl hover:from-blue-700 hover:to-blue-800 transition-all duration-200"
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-linear-to-r from-emerald-600 to-emerald-700 text-white rounded-xl font-semibold shadow-lg shadow-emerald-200 hover:shadow-xl hover:from-emerald-700 hover:to-emerald-800 transition-all duration-200"
                   >
                     <Plus size={18} />
                     Add New Address
@@ -828,7 +921,7 @@ export default function CustomerProfilePage() {
                     <p className="text-gray-500 mb-6">Add your first address to start shopping</p>
                     <button
                       onClick={handleAddAddress}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl font-semibold shadow-lg shadow-blue-200 hover:shadow-xl transition-all"
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-linear-to-r from-emerald-600 to-emerald-700 text-white rounded-xl font-semibold shadow-lg shadow-emerald-200 hover:shadow-xl transition-all"
                     >
                       <Plus size={18} />
                       Add Your First Address
@@ -854,7 +947,7 @@ export default function CustomerProfilePage() {
 
             {activeTab === "orders" && (
               <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
-                <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-full p-8 w-32 h-32 mx-auto mb-6">
+                <div className="bg-linear-to-br from-gray-50 to-gray-100 rounded-full p-8 w-32 h-32 mx-auto mb-6">
                   <ShoppingBag size={64} className="text-gray-400 mx-auto" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">No orders yet</h3>
@@ -867,15 +960,15 @@ export default function CustomerProfilePage() {
             {activeTab === "settings" && (
               <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
                 <div className="text-center mb-8">
-                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-full p-6 w-24 h-24 mx-auto mb-4">
-                    <Settings size={48} className="text-purple-600 mx-auto" />
+                  <div className="bg-gray-100 rounded-full p-6 w-24 h-24 mx-auto mb-4">
+                    <Settings size={48} className="text-gray-600 mx-auto" />
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-2">Settings Coming Soon</h3>
                   <p className="text-gray-500">
                     Account preferences, notification settings, and more will be available here
                   </p>
                 </div>
-                
+
                 <div className="grid gap-4 max-w-2xl mx-auto">
                   {[
                     { icon: Bell, label: "Notifications", description: "Manage your alert preferences" },
@@ -884,8 +977,8 @@ export default function CustomerProfilePage() {
                     { icon: Globe, label: "Language & Region", description: "Customize your experience" },
                   ].map((item, idx) => (
                     <div key={idx} className="flex items-center gap-4 p-4 rounded-xl hover:bg-gray-50 transition-all cursor-pointer group">
-                      <div className="p-2 bg-gray-100 rounded-xl group-hover:bg-blue-100 transition-all">
-                        <item.icon size={20} className="text-gray-600 group-hover:text-blue-600" />
+                      <div className="p-2 bg-gray-100 rounded-xl group-hover:bg-emerald-100 transition-all">
+                        <item.icon size={20} className="text-gray-600 group-hover:text-emerald-600" />
                       </div>
                       <div className="flex-1">
                         <p className="font-semibold text-gray-900">{item.label}</p>
@@ -901,7 +994,6 @@ export default function CustomerProfilePage() {
         </div>
       </div>
 
-      {/* Address Form Modal */}
       <AddressFormModal
         isOpen={isAddressModalOpen}
         onClose={() => {
@@ -914,63 +1006,3 @@ export default function CustomerProfilePage() {
     </div>
   );
 }
-
-// Missing import for Mail icon
-const Mail = (props: any) => (
-  <svg
-    {...props}
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect width="20" height="16" x="2" y="4" rx="2" />
-    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-  </svg>
-);
-
-// Missing useAddressActions hook implementation
-const useAddressActions = () => {
-  const [deleteAddress, { isLoading: isDeleting }] = useDeleteAddressMutation();
-  const [setDefaultAddress, { isLoading: isSettingDefault }] = useSetDefaultAddressMutation();
-  const { refetch } = useGetMyAddressesQuery();
-
-  const handleDelete = useCallback(
-    async (id: string) => {
-      if (!window.confirm("Are you sure you want to delete this address?")) return;
-      try {
-        await deleteAddress(id).unwrap();
-        await refetch();
-      } catch (error) {
-        console.error("Failed to delete address:", error);
-        throw error;
-      }
-    },
-    [deleteAddress, refetch]
-  );
-
-  const handleSetDefault = useCallback(
-    async (id: string) => {
-      try {
-        await setDefaultAddress(id).unwrap();
-        await refetch();
-      } catch (error) {
-        console.error("Failed to set default address:", error);
-        throw error;
-      }
-    },
-    [setDefaultAddress, refetch]
-  );
-
-  return {
-    handleDelete,
-    handleSetDefault,
-    isDeleting,
-    isSettingDefault,
-  };
-};
