@@ -28,6 +28,7 @@ import { courierApi } from '../../services/courierApi';
 import { shippingZoneApi } from '../../services/shippingZoneApi';
 import { pickupStationApi } from '../../services/pickupStationApi';
 import stepReducer from '../../admin/steps/util/stepSlice';
+import { vehicleApi } from '../../services/vehicleApi';
 
 /* ================= STORE ================= */
 
@@ -58,6 +59,7 @@ export const store = configureStore({
     [shippingZoneApi.reducerPath]: shippingZoneApi.reducer,
     [pickupStationApi.reducerPath]: pickupStationApi.reducer,
     [shipmentApi.reducerPath]: shipmentApi.reducer,
+    [vehicleApi.reducerPath]: vehicleApi.reducer,
   },
 
   middleware: (getDefaultMiddleware) =>
@@ -83,6 +85,7 @@ export const store = configureStore({
       shippingZoneApi.middleware,
       pickupStationApi.middleware,
       shipmentApi.middleware,
+      vehicleApi.middleware
     ),
 });
 

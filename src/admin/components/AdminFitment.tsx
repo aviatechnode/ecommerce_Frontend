@@ -1,2078 +1,867 @@
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
+
+import { useGetProductsQuery } from '../../services/productApi';
 import {
-  useCreateMakeMutation,
-  useCreateModelMutation,
-  useCreateGenerationMutation,
-  useCreateEngineMutation,
-  useCreateTrimMutation,
-  useAssignProductFitmentMutation,
-  useBulkAssignProductFitmentMutation,
-  useGetProductsByFitmentQuery,
-  useGetVehicleTreeQuery,
-  useDeleteMakeMutation,
-  useDeleteModelMutation,
-  useDeleteGenerationMutation,
-  useDeleteEngineMutation,
-  useDeleteTrimMutation,
-  useUpdateMakeMutation,
-  useUpdateModelMutation,
-  useUpdateGenerationMutation,
-  useUpdateEngineMutation,
-  useUpdateTrimMutation,
-} from "../../services/fitmentApi";
+  useGetConfigsQuery,
+  useCreateConfigMutation,
+  useUpdateConfigMutation,
+  useDeleteConfigMutation,
+  useGetRulesQuery,
+  useCreateRuleMutation,
+  useUpdateRuleMutation,
+  useDeleteRuleMutation,
+  useGetProductFitmentsQuery,
+  useCreateProductFitmentMutation,
+  useUpdateProductFitmentMutation,
+  useDeleteProductFitmentMutation,
+  useGetProductIndexQuery,
+  useGetLogsQuery,
+} from '../../services/fitmentApi';
 
-import type {
-  FitmentLevel,
-  VehicleMake,
-} from "../../types/fitment.types";
+import {
+  useGetMakesQuery,
+  useGetModelsQuery,
+  useGetGenerationsQuery,
+  useGetEnginesQuery,
+  useGetTrimsQuery,
+} from '../../services/vehicleApi';
 
-/** Small loading spinner */
-const Spinner = () => (
-  <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-green-600" />
-);
+// Types (adjust paths to your actual types)
+type FitmentLevel = 'EXACT' | 'UPSELL' | 'CROSSSELL';
+type FitmentType = 'EXACT' | 'ALTERNATIVE' | 'UNIVERSAL';
 
-/** Modal base component */
-const Modal = ({
-  title,
-  children,
-  onClose,
-}: {
-  title: string;
-  children: React.ReactNode;
-  onClose: () => void;
-}) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
-      <div className="flex items-center justify-between border-b px-6 py-4">
-        <h2 className="text-xl font-semibold">{title}</h2>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-          ✕
-        </button>
-      </div>
-      <div className="p-6">{children}</div>
-    </div>
-  </div>
-);
+interface FitmentConfig {
+  id: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  allowUniversalFallback: boolean;
+  allowCrossGenerationMatch: boolean;
+  allowEngineFallback: boolean;
+  weightMake: number;
+  weightModel: number;
+  weightGeneration: number;
+  weightEngine: number;
+  weightTrim: number;
+  weightYear: number;
+  enableFitmentIndexing: boolean;
+  enableTextSearchFallback: boolean;
+}
 
-// ============================================================
-// Main Component
-// ============================================================
-const AdminFitments = () => {
-  // --------------------- Queries ---------------------------
-  const {
-    data: vehicleTree,
-    isLoading: treeLoading,
-    refetch: refetchTree,
-  } = useGetVehicleTreeQuery();
+interface FitmentRule {
+  id: string;
+  type: FitmentType;
+  level: FitmentLevel;
+  requiresMake: boolean;
+  requiresModel: boolean;
+  requiresGeneration: boolean;
+  requiresEngine: boolean;
+  requiresTrim: boolean;
+  requiresYear: boolean;
+  allowYearRange: boolean;
+  strictMatching: boolean;
+  priority: number;
+}
 
-  // --------------------- Mutations (Create) -----------------
-  const [createMake, { isLoading: creatingMake }] = useCreateMakeMutation();
-  const [createModel, { isLoading: creatingModel }] = useCreateModelMutation();
-  const [createGeneration, { isLoading: creatingGeneration }] =
-    useCreateGenerationMutation();
-  const [createEngine, { isLoading: creatingEngine }] = useCreateEngineMutation();
-  const [createTrim, { isLoading: creatingTrim }] = useCreateTrimMutation();
-  const [assignFitment, { isLoading: assigningSingle }] =
-    useAssignProductFitmentMutation();
-  const [bulkAssignFitment, { isLoading: assigningBulk }] =
-    useBulkAssignProductFitmentMutation();
+interface ProductFitment {
+  id: string;
+  productId: string;
+  level: FitmentLevel;
+  type: FitmentType;
+  makeId?: string;
+  modelId?: string;
+  generationId?: string;
+  engineId?: string;
+  trimId?: string;
+  yearStart?: number;
+  yearEnd?: number;
+  notes?: string;
+  position?: string;
+  quantityRequired?: number;
+  isUniversal: boolean;
+  isVerified: boolean;
+  confidenceScore?: number;
+  // joined relations
+  make?: { id: string; name: string };
+  model?: { id: string; name: string };
+  generation?: { id: string; name: string };
+  engine?: { id: string; name: string };
+  trim?: { id: string; name: string };
+}
 
-  // --------------------- Mutations (Delete) -----------------
-  const [deleteMake] = useDeleteMakeMutation();
-  const [deleteModel] = useDeleteModelMutation();
-  const [deleteGeneration] = useDeleteGenerationMutation();
-  const [deleteEngine] = useDeleteEngineMutation();
-  const [deleteTrim] = useDeleteTrimMutation();
+// ----------------------------------------------------------------------
+// Helper components (Cascading vehicle selects)
+// ----------------------------------------------------------------------
+interface VehicleSelectorProps {
+  selectedMakeId: string;
+  onMakeChange: (makeId: string) => void;
+  selectedModelId: string;
+  onModelChange: (modelId: string) => void;
+  selectedGenerationId: string;
+  onGenerationChange: (generationId: string) => void;
+  selectedEngineId: string;
+  onEngineChange: (engineId: string) => void;
+  selectedTrimId: string;
+  onTrimChange: (trimId: string) => void;
+  required?: boolean;
+  className?: string;
+}
 
-  // --------------------- Mutations (Update) -----------------
-  const [updateMake] = useUpdateMakeMutation();
-  const [updateModel] = useUpdateModelMutation();
-  const [updateGeneration] = useUpdateGenerationMutation();
-  const [updateEngine] = useUpdateEngineMutation();
-  const [updateTrim] = useUpdateTrimMutation();
+const VehicleSelector: React.FC<VehicleSelectorProps> = ({
+  selectedMakeId,
+  onMakeChange,
+  selectedModelId,
+  onModelChange,
+  selectedGenerationId,
+  onGenerationChange,
+  selectedEngineId,
+  onEngineChange,
+  selectedTrimId,
+  onTrimChange,
+  required = false,
+  className = '',
+}) => {
+  const { data: makes = [] } = useGetMakesQuery();
+  const { data: models = [] } = useGetModelsQuery(selectedMakeId || undefined);
+  const { data: generations = [] } = useGetGenerationsQuery(selectedModelId || undefined);
+  const { data: engines = [] } = useGetEnginesQuery(selectedGenerationId || undefined);
+  const { data: trims = [] } = useGetTrimsQuery(selectedEngineId || undefined);
 
-  // --------------------- UI State --------------------------
-  const [activeModal, setActiveModal] = useState<
-    | "make"
-    | "model"
-    | "generation"
-    | "engine"
-    | "trim"
-    | "assignSingle"
-    | "assignBulk"
-    | null
-  >(null);
-
-  // State for editing (when user clicks ✏️)
-  const [editingItem, setEditingItem] = useState<{
-    type: "make" | "model" | "generation" | "engine" | "trim";
-    id: string;
-    data: any;
-  } | null>(null);
-
-  // Form state for creation modals
-  const [makeForm, setMakeForm] = useState({ name: "", slug: "", isActive: true });
-  const [modelForm, setModelForm] = useState({
-    makeId: "",
-    name: "",
-    slug: "",
-    isActive: true,
-  });
-  const [genForm, setGenForm] = useState({
-    modelId: "",
-    name: "",
-    slug: "",
-    chassisCode: "",
-    yearStart: new Date().getFullYear(),
-    yearEnd: "",
-    isActive: true,
-  });
-  const [engineForm, setEngineForm] = useState({
-    generationId: "",
-    engineCode: "",
-    engineName: "",
-    fuelType: "",
-    aspiration: "",
-    cylinders: "",
-    horsepower: "",
-    displacementCc: "",
-    displacementLabel: "",
-    drivetrain: "",
-    transmissionType: "",
-    isActive: true,
-  });
-  const [trimForm, setTrimForm] = useState({
-    engineId: "",
-    name: "",
-    bodyType: "",
-    doors: "",
-    isActive: true,
-  });
-
-  // Form state for single assignment
-  const [singleAssign, setSingleAssign] = useState({
-    productId: "",
-    level: "TRIM" as FitmentLevel,
-    makeId: "",
-    modelId: "",
-    generationId: "",
-    engineId: "",
-    trimId: "",
-    yearStart: "",
-    yearEnd: "",
-    notes: "",
-    position: "",
-    quantityRequired: "",
-    isUniversal: false,
-  });
-
-  // Form state for bulk assignment
-  const [bulkAssign, setBulkAssign] = useState({
-    productId: "",
-    trimIds: "",
-    notes: "",
-    position: "",
-    quantityRequired: "",
-  });
-
-  // Search with actual values instead of IDs
-  const [searchTerms, setSearchTerms] = useState({
-    makeName: "",
-    modelName: "",
-    generationName: "",
-    engineCode: "",
-    trimName: "",
-    year: "",
-  });
-
-  // Populate edit forms when editingItem changes
-  useEffect(() => {
-    if (!editingItem) return;
-    const { type, data } = editingItem;
-    switch (type) {
-      case "make":
-        setMakeForm({ name: data.name, slug: data.slug || "", isActive: data.isActive });
-        break;
-      case "model":
-        setModelForm({
-          makeId: data.makeId,
-          name: data.name,
-          slug: data.slug || "",
-          isActive: data.isActive,
-        });
-        break;
-      case "generation":
-        setGenForm({
-          modelId: data.modelId,
-          name: data.name,
-          slug: data.slug || "",
-          chassisCode: data.chassisCode || "",
-          yearStart: data.yearStart,
-          yearEnd: data.yearEnd?.toString() || "",
-          isActive: data.isActive,
-        });
-        break;
-      case "engine":
-        setEngineForm({
-          generationId: data.generationId,
-          engineCode: data.engineCode,
-          engineName: data.engineName || "",
-          fuelType: data.fuelType || "",
-          aspiration: data.aspiration || "",
-          cylinders: data.cylinders?.toString() || "",
-          horsepower: data.horsepower?.toString() || "",
-          displacementCc: data.displacementCc?.toString() || "",
-          displacementLabel: data.displacementLabel || "",
-          drivetrain: data.drivetrain || "",
-          transmissionType: data.transmissionType || "",
-          isActive: data.isActive,
-        });
-        break;
-      case "trim":
-        setTrimForm({
-          engineId: data.engineId,
-          name: data.name,
-          bodyType: data.bodyType || "",
-          doors: data.doors?.toString() || "",
-          isActive: data.isActive,
-        });
-        break;
-    }
-  }, [editingItem]);
-
-  // ============================================================
-  // CORRECTED HELPER FUNCTIONS (exact match, case-insensitive)
-  // ============================================================
-  const findMakeIdByName = (makeName: string): string | undefined => {
-    const make = vehicleTree?.find(
-      (m) => m.name.localeCompare(makeName, undefined, { sensitivity: 'base' }) === 0
-    );
-    return make?.id;
-  };
-
-  const findModelIdByName = (makeName: string, modelName: string): string | undefined => {
-    const make = vehicleTree?.find(
-      (m) => m.name.localeCompare(makeName, undefined, { sensitivity: 'base' }) === 0
-    );
-    const model = make?.models?.find(
-      (m) => m.name.localeCompare(modelName, undefined, { sensitivity: 'base' }) === 0
-    );
-    return model?.id;
-  };
-
-  const findGenerationIdByName = (
-    makeName: string,
-    modelName: string,
-    generationName: string
-  ): string | undefined => {
-    const make = vehicleTree?.find(
-      (m) => m.name.localeCompare(makeName, undefined, { sensitivity: 'base' }) === 0
-    );
-    const model = make?.models?.find(
-      (m) => m.name.localeCompare(modelName, undefined, { sensitivity: 'base' }) === 0
-    );
-    const generation = model?.generations?.find(
-      (g) => g.name.localeCompare(generationName, undefined, { sensitivity: 'base' }) === 0
-    );
-    return generation?.id;
-  };
-
-  // Standard engine lookup using full context (requires generation name)
-  const findEngineIdByCode = (
-    makeName: string,
-    modelName: string,
-    generationName: string,
-    engineCode: string
-  ): string | undefined => {
-    const make = vehicleTree?.find(
-      (m) => m.name.localeCompare(makeName, undefined, { sensitivity: 'base' }) === 0
-    );
-    const model = make?.models?.find(
-      (m) => m.name.localeCompare(modelName, undefined, { sensitivity: 'base' }) === 0
-    );
-    const generation = model?.generations?.find(
-      (g) => g.name.localeCompare(generationName, undefined, { sensitivity: 'base' }) === 0
-    );
-    const engine = generation?.engines?.find(
-      (e) => e.engineCode.localeCompare(engineCode, undefined, { sensitivity: 'base' }) === 0
-    );
-    return engine?.id;
-  };
-
-  // Fallback: find engine by code anywhere in the tree (used when generation name is missing)
-  const findEngineIdByCodeOnly = (engineCode: string): string | undefined => {
-    for (const make of vehicleTree || []) {
-      for (const model of make.models || []) {
-        for (const gen of model.generations || []) {
-          const engine = gen.engines?.find(
-            (e) => e.engineCode.localeCompare(engineCode, undefined, { sensitivity: 'base' }) === 0
-          );
-          if (engine) return engine.id;
-        }
-      }
-    }
-    return undefined;
-  };
-
-  const findTrimIdByName = (
-    makeName: string,
-    modelName: string,
-    generationName: string,
-    engineCode: string,
-    trimName: string
-  ): string | undefined => {
-    const make = vehicleTree?.find(
-      (m) => m.name.localeCompare(makeName, undefined, { sensitivity: 'base' }) === 0
-    );
-    const model = make?.models?.find(
-      (m) => m.name.localeCompare(modelName, undefined, { sensitivity: 'base' }) === 0
-    );
-    const generation = model?.generations?.find(
-      (g) => g.name.localeCompare(generationName, undefined, { sensitivity: 'base' }) === 0
-    );
-    const engine = generation?.engines?.find(
-      (e) => e.engineCode.localeCompare(engineCode, undefined, { sensitivity: 'base' }) === 0
-    );
-    const trim = engine?.trims?.find(
-      (t) => t.name.localeCompare(trimName, undefined, { sensitivity: 'base' }) === 0
-    );
-    return trim?.id;
-  };
-
-  // ============================================================
-  // CORRECTED SEARCH PARAMS (with robust engine resolution)
-  // ============================================================
-  const searchParams = useMemo(() => {
-    let makeId: string | undefined;
-    let modelId: string | undefined;
-    let generationId: string | undefined;
-    let engineId: string | undefined;
-    let trimId: string | undefined;
-
-    if (searchTerms.makeName) {
-      makeId = findMakeIdByName(searchTerms.makeName);
-
-      if (searchTerms.modelName && makeId) {
-        modelId = findModelIdByName(searchTerms.makeName, searchTerms.modelName);
-
-        if (searchTerms.generationName && modelId) {
-          generationId = findGenerationIdByName(
-            searchTerms.makeName,
-            searchTerms.modelName,
-            searchTerms.generationName
-          );
-        }
-
-        if (searchTerms.engineCode) {
-          // Try to find engine using full context (generation name if available)
-          if (searchTerms.generationName && modelId) {
-            engineId = findEngineIdByCode(
-              searchTerms.makeName,
-              searchTerms.modelName,
-              searchTerms.generationName,
-              searchTerms.engineCode
-            );
-          }
-          // Fallback: search entire tree for engine code (no generation needed)
-          if (!engineId) {
-            engineId = findEngineIdByCodeOnly(searchTerms.engineCode);
-          }
-
-          // Trim lookup requires generation name and resolved engine
-          if (engineId && searchTerms.trimName && searchTerms.generationName) {
-            trimId = findTrimIdByName(
-              searchTerms.makeName,
-              searchTerms.modelName,
-              searchTerms.generationName,
-              searchTerms.engineCode,
-              searchTerms.trimName
-            );
-          }
-        }
-      }
-    }
-
-    return {
-      makeId,
-      modelId,
-      generationId,
-      engineId,
-      trimId,
-      year: searchTerms.year ? parseInt(searchTerms.year, 10) : undefined,
-    };
-  }, [searchTerms, vehicleTree]);
-
-  const shouldSkipSearch =
-    !searchTerms.makeName &&
-    !searchTerms.modelName &&
-    !searchTerms.generationName &&
-    !searchTerms.engineCode &&
-    !searchTerms.trimName &&
-    !searchTerms.year;
-
-  const {
-    data: searchedProducts,
-    isFetching: searchingProducts,
-    refetch: searchProducts,
-  } = useGetProductsByFitmentQuery(
-    {
-      makeId: searchParams.makeId,
-      modelId: searchParams.modelId,
-      generationId: searchParams.generationId,
-      engineId: searchParams.engineId,
-      trimId: searchParams.trimId,
-      year: searchParams.year,
-    },
-    { skip: shouldSkipSearch }
-  );
-
-  // --------------------- Handlers --------------------------
-  const closeModal = () => setActiveModal(null);
-  const closeEditModal = () => setEditingItem(null);
-
-  // Delete handler with confirmation
-  const handleDelete = async (type: string, id: string, name: string) => {
-    if (!confirm(`Delete ${type} "${name}"? This will also delete all children items.`)) return;
-    try {
-      switch (type) {
-        case "make":
-          await deleteMake(id).unwrap();
-          break;
-        case "model":
-          await deleteModel(id).unwrap();
-          break;
-        case "generation":
-          await deleteGeneration(id).unwrap();
-          break;
-        case "engine":
-          await deleteEngine(id).unwrap();
-          break;
-        case "trim":
-          await deleteTrim(id).unwrap();
-          break;
-      }
-      refetchTree();
-    } catch (err) {
-      console.error(err);
-      alert(`Failed to delete ${type}`);
-    }
-  };
-
-  // Open edit modal with current data
-  const handleEdit = (type: string, id: string, data: any) => {
-    setEditingItem({ type: type as any, id, data });
-  };
-
-  // Update submission
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingItem) return;
-    try {
-      switch (editingItem.type) {
-        case "make":
-          await updateMake({
-            id: editingItem.id,
-            data: {
-              name: makeForm.name,
-              slug: makeForm.slug || undefined,
-              isActive: makeForm.isActive,
-            },
-          }).unwrap();
-          break;
-        case "model":
-          await updateModel({
-            id: editingItem.id,
-            data: {
-              makeId: modelForm.makeId,
-              name: modelForm.name,
-              slug: modelForm.slug || undefined,
-              isActive: modelForm.isActive,
-            },
-          }).unwrap();
-          break;
-        case "generation":
-          await updateGeneration({
-            id: editingItem.id,
-            data: {
-              modelId: genForm.modelId,
-              name: genForm.name,
-              slug: genForm.slug || undefined,
-              chassisCode: genForm.chassisCode || undefined,
-              yearStart: genForm.yearStart,
-              yearEnd: genForm.yearEnd ? parseInt(genForm.yearEnd) : undefined,
-              isActive: genForm.isActive,
-            },
-          }).unwrap();
-          break;
-        case "engine":
-          await updateEngine({
-            id: editingItem.id,
-            data: {
-              generationId: engineForm.generationId,
-              engineCode: engineForm.engineCode,
-              engineName: engineForm.engineName || undefined,
-              fuelType: engineForm.fuelType || undefined,
-              aspiration: engineForm.aspiration || undefined,
-              cylinders: engineForm.cylinders ? parseInt(engineForm.cylinders) : undefined,
-              horsepower: engineForm.horsepower ? parseInt(engineForm.horsepower) : undefined,
-              displacementCc: engineForm.displacementCc ? parseInt(engineForm.displacementCc) : undefined,
-              displacementLabel: engineForm.displacementLabel || undefined,
-              drivetrain: engineForm.drivetrain || undefined,
-              transmissionType: engineForm.transmissionType || undefined,
-              isActive: engineForm.isActive,
-            },
-          }).unwrap();
-          break;
-        case "trim":
-          await updateTrim({
-            id: editingItem.id,
-            data: {
-              engineId: trimForm.engineId,
-              name: trimForm.name,
-              bodyType: trimForm.bodyType || undefined,
-              doors: trimForm.doors ? parseInt(trimForm.doors) : undefined,
-              isActive: trimForm.isActive,
-            },
-          }).unwrap();
-          break;
-      }
-      refetchTree();
-      closeEditModal();
-      // Reset forms to defaults (optional)
-      setMakeForm({ name: "", slug: "", isActive: true });
-      setModelForm({ makeId: "", name: "", slug: "", isActive: true });
-      setGenForm({
-        modelId: "",
-        name: "",
-        slug: "",
-        chassisCode: "",
-        yearStart: new Date().getFullYear(),
-        yearEnd: "",
-        isActive: true,
-      });
-      setEngineForm({
-        generationId: "",
-        engineCode: "",
-        engineName: "",
-        fuelType: "",
-        aspiration: "",
-        cylinders: "",
-        horsepower: "",
-        displacementCc: "",
-        displacementLabel: "",
-        drivetrain: "",
-        transmissionType: "",
-        isActive: true,
-      });
-      setTrimForm({
-        engineId: "",
-        name: "",
-        bodyType: "",
-        doors: "",
-        isActive: true,
-      });
-    } catch (err) {
-      console.error(err);
-      alert("Update failed");
-    }
-  };
-
-  // Create handlers (unchanged)
-  const handleCreateMake = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await createMake(makeForm).unwrap();
-      refetchTree();
-      closeModal();
-      setMakeForm({ name: "", slug: "", isActive: true });
-    } catch (err) {
-      console.error(err);
-      alert("Failed to create make");
-    }
-  };
-
-  const handleCreateModel = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await createModel(modelForm).unwrap();
-      refetchTree();
-      closeModal();
-      setModelForm({ makeId: "", name: "", slug: "", isActive: true });
-    } catch (err) {
-      console.error(err);
-      alert("Failed to create model");
-    }
-  };
-
-  const handleCreateGeneration = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await createGeneration({
-        ...genForm,
-        yearEnd: genForm.yearEnd ? parseInt(genForm.yearEnd) : undefined,
-      }).unwrap();
-      refetchTree();
-      closeModal();
-      setGenForm({
-        modelId: "",
-        name: "",
-        slug: "",
-        chassisCode: "",
-        yearStart: new Date().getFullYear(),
-        yearEnd: "",
-        isActive: true,
-      });
-    } catch (err) {
-      console.error(err);
-      alert("Failed to create generation");
-    }
-  };
-
-  const handleCreateEngine = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await createEngine({
-        ...engineForm,
-        cylinders: engineForm.cylinders ? parseInt(engineForm.cylinders) : undefined,
-        horsepower: engineForm.horsepower ? parseInt(engineForm.horsepower) : undefined,
-        displacementCc: engineForm.displacementCc
-          ? parseInt(engineForm.displacementCc)
-          : undefined,
-      }).unwrap();
-      refetchTree();
-      closeModal();
-      setEngineForm({
-        generationId: "",
-        engineCode: "",
-        engineName: "",
-        fuelType: "",
-        aspiration: "",
-        cylinders: "",
-        horsepower: "",
-        displacementCc: "",
-        displacementLabel: "",
-        drivetrain: "",
-        transmissionType: "",
-        isActive: true,
-      });
-    } catch (err) {
-      console.error(err);
-      alert("Failed to create engine");
-    }
-  };
-
-  const handleCreateTrim = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await createTrim({
-        ...trimForm,
-        doors: trimForm.doors ? parseInt(trimForm.doors) : undefined,
-      }).unwrap();
-      refetchTree();
-      closeModal();
-      setTrimForm({
-        engineId: "",
-        name: "",
-        bodyType: "",
-        doors: "",
-        isActive: true,
-      });
-    } catch (err) {
-      console.error(err);
-      alert("Failed to create trim");
-    }
-  };
-
-  const handleSingleAssign = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await assignFitment({
-        productId: singleAssign.productId,
-        level: singleAssign.level,
-        makeId: singleAssign.makeId || undefined,
-        modelId: singleAssign.modelId || undefined,
-        generationId: singleAssign.generationId || undefined,
-        engineId: singleAssign.engineId || undefined,
-        trimId: singleAssign.trimId || undefined,
-        yearStart: singleAssign.yearStart ? parseInt(singleAssign.yearStart) : undefined,
-        yearEnd: singleAssign.yearEnd ? parseInt(singleAssign.yearEnd) : undefined,
-        notes: singleAssign.notes || undefined,
-        position: singleAssign.position || undefined,
-        quantityRequired: singleAssign.quantityRequired
-          ? parseInt(singleAssign.quantityRequired)
-          : undefined,
-        isUniversal: singleAssign.isUniversal,
-      }).unwrap();
-      alert("Fitment assigned successfully");
-      closeModal();
-      setSingleAssign({
-        productId: "",
-        level: "TRIM",
-        makeId: "",
-        modelId: "",
-        generationId: "",
-        engineId: "",
-        trimId: "",
-        yearStart: "",
-        yearEnd: "",
-        notes: "",
-        position: "",
-        quantityRequired: "",
-        isUniversal: false,
-      });
-    } catch (err) {
-      console.error(err);
-      alert("Failed to assign fitment");
-    }
-  };
-
-  const handleBulkAssign = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimIdsArray = bulkAssign.trimIds
-      .split(",")
-      .map((id) => id.trim())
-      .filter(Boolean);
-    if (trimIdsArray.length === 0) {
-      alert("Please enter at least one Trim ID");
-      return;
-    }
-    try {
-      await bulkAssignFitment({
-        productId: bulkAssign.productId,
-        trimIds: trimIdsArray,
-        notes: bulkAssign.notes || undefined,
-        position: bulkAssign.position || undefined,
-        quantityRequired: bulkAssign.quantityRequired
-          ? parseInt(bulkAssign.quantityRequired)
-          : undefined,
-      }).unwrap();
-      alert("Bulk fitments assigned successfully");
-      closeModal();
-      setBulkAssign({ productId: "", trimIds: "", notes: "", position: "", quantityRequired: "" });
-    } catch (err) {
-      console.error(err);
-      alert("Failed to assign bulk fitments");
-    }
-  };
-
-  // --------------------- Render Tree (with edit/delete) -----------------
-  const renderTree = (makes: VehicleMake[]) => (
-    <div className="space-y-4">
-      {makes.map((make) => (
-        <div key={make.id} className="rounded-lg border border-gray-200 p-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-gray-800">{make.name}</h3>
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleEdit("make", make.id, make)}
-                className="rounded bg-yellow-100 px-2 py-1 text-xs text-yellow-700 hover:bg-yellow-200"
-                title="Edit Make"
-              >
-                ✏️
-              </button>
-              <button
-                onClick={() => handleDelete("make", make.id, make.name)}
-                className="rounded bg-red-100 px-2 py-1 text-xs text-red-700 hover:bg-red-200"
-                title="Delete Make"
-              >
-                🗑️
-              </button>
-              <button
-                onClick={() => {
-                  setModelForm({ ...modelForm, makeId: make.id });
-                  setActiveModal("model");
-                }}
-                className="rounded bg-green-100 px-3 py-1 text-sm text-green-700 hover:bg-green-200"
-              >
-                + Model
-              </button>
-            </div>
-          </div>
-          <div className="ml-4 mt-3 space-y-3">
-            {make.models?.map((model) => (
-              <div key={model.id} className="border-l-2 border-gray-200 pl-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-semibold text-gray-700">{model.name}</h4>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleEdit("model", model.id, model)}
-                      className="rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700"
-                      title="Edit Model"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      onClick={() => handleDelete("model", model.id, model.name)}
-                      className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700"
-                      title="Delete Model"
-                    >
-                      🗑️
-                    </button>
-                    <button
-                      onClick={() => {
-                        setGenForm({ ...genForm, modelId: model.id });
-                        setActiveModal("generation");
-                      }}
-                      className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700"
-                    >
-                      + Generation
-                    </button>
-                  </div>
-                </div>
-                <div className="ml-4 mt-2 space-y-2">
-                  {model.generations?.map((gen) => (
-                    <div key={gen.id} className="text-sm text-gray-600">
-                      <div className="flex items-center justify-between">
-                        <span>
-                          {gen.name} ({gen.yearStart}
-                          {gen.yearEnd ? `-${gen.yearEnd}` : ""})
-                          {gen.chassisCode && ` [${gen.chassisCode}]`}
-                        </span>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEdit("generation", gen.id, gen)}
-                            className="rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700"
-                            title="Edit Generation"
-                          >
-                            ✏️
-                          </button>
-                          <button
-                            onClick={() => handleDelete("generation", gen.id, gen.name)}
-                            className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700"
-                            title="Delete Generation"
-                          >
-                            🗑️
-                          </button>
-                          <button
-                            onClick={() => {
-                              setEngineForm({ ...engineForm, generationId: gen.id });
-                              setActiveModal("engine");
-                            }}
-                            className="rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-700"
-                          >
-                            + Engine
-                          </button>
-                        </div>
-                      </div>
-                      <div className="ml-4 mt-1 space-y-1">
-                        {gen.engines?.map((eng) => (
-                          <div key={eng.id} className="text-xs text-gray-500">
-                            <div className="flex items-center justify-between">
-                              <span>
-                                {eng.engineCode} {eng.engineName && `- ${eng.engineName}`}
-                                {eng.displacementLabel && ` (${eng.displacementLabel})`}
-                              </span>
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => handleEdit("engine", eng.id, eng)}
-                                  className="rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700"
-                                  title="Edit Engine"
-                                >
-                                  ✏️
-                                </button>
-                                <button
-                                  onClick={() => handleDelete("engine", eng.id, eng.engineCode)}
-                                  className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700"
-                                  title="Delete Engine"
-                                >
-                                  🗑️
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setTrimForm({ ...trimForm, engineId: eng.id });
-                                    setActiveModal("trim");
-                                  }}
-                                  className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700"
-                                >
-                                  + Trim
-                                </button>
-                              </div>
-                            </div>
-                            <div className="ml-4">
-                              {eng.trims?.map((trim) => (
-                                <div key={trim.id} className="flex items-center justify-between text-gray-400">
-                                  <span>
-                                    {trim.name} {trim.bodyType && `(${trim.bodyType})`}
-                                  </span>
-                                  <div className="flex gap-1">
-                                    <button
-                                      onClick={() => handleEdit("trim", trim.id, trim)}
-                                      className="rounded bg-yellow-100 px-1 py-0.5 text-xs text-yellow-700"
-                                      title="Edit Trim"
-                                    >
-                                      ✏️
-                                    </button>
-                                    <button
-                                      onClick={() => handleDelete("trim", trim.id, trim.name)}
-                                      className="rounded bg-red-100 px-1 py-0.5 text-xs text-red-700"
-                                      title="Delete Trim"
-                                    >
-                                      🗑️
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-
-  // --------------------- JSX -------------------------------
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mx-auto max-w-7xl space-y-8">
-        {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-white p-6 shadow-sm">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              🚗 Fitment Manager
-            </h1>
-            <p className="text-sm text-gray-500">
-              Manage vehicle makes, models, generations, engines, trims and product fitments.
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setActiveModal("make")}
-              className="rounded-xl bg-green-600 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-green-700"
-            >
-              + New Make
-            </button>
-            <button
-              onClick={() => setActiveModal("assignSingle")}
-              className="rounded-xl bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-blue-700"
-            >
-              🔗 Single Assign
-            </button>
-            <button
-              onClick={() => setActiveModal("assignBulk")}
-              className="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-700"
-            >
-              📦 Bulk Assign
-            </button>
-          </div>
-        </div>
-
-        {/* Vehicle Tree */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Vehicle Hierarchy</h2>
-            <button
-              onClick={() => refetchTree()}
-              className="text-sm text-gray-500 hover:text-gray-700"
-            >
-              🔄 Refresh
-            </button>
-          </div>
-          {treeLoading ? (
-            <div className="flex justify-center py-12">
-              <Spinner /> <span className="ml-2">Loading vehicle tree...</span>
-            </div>
-          ) : vehicleTree && vehicleTree.length > 0 ? (
-            renderTree(vehicleTree)
-          ) : (
-            <div className="py-12 text-center text-gray-500">
-              No vehicles found. Click "New Make" to start.
-            </div>
-          )}
-        </div>
-
-        {/* Search Products by Fitment */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-xl font-semibold">🔍 Find Products by Vehicle</h2>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <input
-                type="text"
-                placeholder="Make name (e.g., Toyota)"
-                value={searchTerms.makeName}
-                onChange={(e) =>
-                  setSearchTerms((p) => ({ ...p, makeName: e.target.value, modelName: "", generationName: "", engineCode: "", trimName: "" }))
-                }
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                list="make-suggestions"
-              />
-              <datalist id="make-suggestions">
-                {vehicleTree?.map(make => (
-                  <option key={make.id} value={make.name} />
-                ))}
-              </datalist>
-
-              <input
-                type="text"
-                placeholder="Model name"
-                value={searchTerms.modelName}
-                disabled={!searchTerms.makeName}
-                onChange={(e) =>
-                  setSearchTerms((p) => ({ ...p, modelName: e.target.value, generationName: "", engineCode: "", trimName: "" }))
-                }
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
-                list="model-suggestions"
-              />
-              <datalist id="model-suggestions">
-                {searchTerms.makeName && vehicleTree
-                  ?.find(m => m.name.localeCompare(searchTerms.makeName, undefined, { sensitivity: 'base' }) === 0)
-                  ?.models?.map(model => (
-                    <option key={model.id} value={model.name} />
-                  ))}
-              </datalist>
-
-              <input
-                type="text"
-                placeholder="Generation name"
-                value={searchTerms.generationName}
-                disabled={!searchTerms.modelName}
-                onChange={(e) =>
-                  setSearchTerms((p) => ({ ...p, generationName: e.target.value, engineCode: "", trimName: "" }))
-                }
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
-                list="generation-suggestions"
-              />
-              <datalist id="generation-suggestions">
-                {searchTerms.makeName && searchTerms.modelName && vehicleTree
-                  ?.find(m => m.name.localeCompare(searchTerms.makeName, undefined, { sensitivity: 'base' }) === 0)
-                  ?.models?.find(m => m.name.localeCompare(searchTerms.modelName, undefined, { sensitivity: 'base' }) === 0)
-                  ?.generations?.map(gen => (
-                    <option key={gen.id} value={gen.name} />
-                  ))}
-              </datalist>
-
-              <input
-                type="text"
-                placeholder="Engine code (e.g., 2JZ-GTE)"
-                value={searchTerms.engineCode}
-                disabled={!searchTerms.modelName}
-                onChange={(e) =>
-                  setSearchTerms((p) => ({ ...p, engineCode: e.target.value, trimName: "" }))
-                }
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
-                list="engine-suggestions"
-              />
-              <datalist id="engine-suggestions">
-                {searchTerms.makeName && searchTerms.modelName && vehicleTree
-                  ?.find(m => m.name.localeCompare(searchTerms.makeName, undefined, { sensitivity: 'base' }) === 0)
-                  ?.models?.find(m => m.name.localeCompare(searchTerms.modelName, undefined, { sensitivity: 'base' }) === 0)
-                  ?.generations?.flatMap(gen => gen.engines || [])
-                  .filter((engine, index, self) => self.findIndex(e => e.engineCode === engine.engineCode) === index)
-                  .map(engine => (
-                    <option key={engine.id} value={engine.engineCode} />
-                  ))}
-              </datalist>
-
-              <input
-                type="text"
-                placeholder="Trim name"
-                value={searchTerms.trimName}
-                disabled={!searchTerms.engineCode}
-                onChange={(e) =>
-                  setSearchTerms((p) => ({ ...p, trimName: e.target.value }))
-                }
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
-                list="trim-suggestions"
-              />
-              <datalist id="trim-suggestions">
-                {searchTerms.makeName && searchTerms.modelName && searchTerms.generationName && searchTerms.engineCode && vehicleTree
-                  ?.find(m => m.name.localeCompare(searchTerms.makeName, undefined, { sensitivity: 'base' }) === 0)
-                  ?.models?.find(m => m.name.localeCompare(searchTerms.modelName, undefined, { sensitivity: 'base' }) === 0)
-                  ?.generations?.find(g => g.name.localeCompare(searchTerms.generationName, undefined, { sensitivity: 'base' }) === 0)
-                  ?.engines?.find(e => e.engineCode.localeCompare(searchTerms.engineCode, undefined, { sensitivity: 'base' }) === 0)
-                  ?.trims?.map(trim => (
-                    <option key={trim.id} value={trim.name} />
-                  ))}
-              </datalist>
-
-              <input
-                type="number"
-                placeholder="Year"
-                value={searchTerms.year}
-                onChange={(e) =>
-                  setSearchTerms((p) => ({ ...p, year: e.target.value }))
-                }
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-            </div>
-
-            {(searchTerms.makeName || searchTerms.modelName || searchTerms.generationName ||
-              searchTerms.engineCode || searchTerms.trimName) && (
-              <div className="rounded-lg bg-blue-50 p-3 text-sm">
-                <p className="font-semibold text-blue-900">Selected Vehicle:</p>
-                <p className="text-blue-800">
-                  {searchTerms.makeName && <span>Make: {searchTerms.makeName}</span>}
-                  {searchTerms.modelName && <span> → Model: {searchTerms.modelName}</span>}
-                  {searchTerms.generationName && <span> → Generation: {searchTerms.generationName}</span>}
-                  {searchTerms.engineCode && <span> → Engine: {searchTerms.engineCode}</span>}
-                  {searchTerms.trimName && <span> → Trim: {searchTerms.trimName}</span>}
-                  {searchTerms.year && <span> → Year: {searchTerms.year}</span>}
-                </p>
-              </div>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                onClick={searchProducts}
-                disabled={shouldSkipSearch}
-                className="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-900 disabled:opacity-50"
-              >
-                Search Products
-              </button>
-              <button
-                onClick={() => setSearchTerms({ makeName: "", modelName: "", generationName: "", engineCode: "", trimName: "", year: "" })}
-                className="rounded-lg bg-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-400"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-4">
-            {searchingProducts && <Spinner />}
-            {searchedProducts && searchedProducts.length > 0 && (
-              <div className="mt-3 space-y-2">
-                <p className="text-sm font-medium text-gray-700">
-                  Found {searchedProducts.length} product(s):
-                </p>
-                <div className="max-h-64 overflow-y-auto space-y-1">
-                  {searchedProducts.map((p: any) => (
-                    <div key={p.id} className="rounded bg-gray-50 p-2 text-sm">
-                      <span className="font-mono text-xs">{p.id}</span> –{" "}
-                      {p.name || "Unnamed product"}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {searchedProducts && searchedProducts.length === 0 && !shouldSkipSearch && (
-              <div className="mt-3 text-sm text-gray-500">
-                No products match this fitment.
-              </div>
-            )}
-          </div>
-        </div>
+    <div className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-5 ${className}`}>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">
+          Make {required && <span className="text-red-500">*</span>}
+        </label>
+        <select
+          value={selectedMakeId || ''}
+          onChange={(e) => onMakeChange(e.target.value)}
+          className="w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm focus:border-green-500 focus:ring-green-200"
+        >
+          <option value="">Select Make</option>
+          {makes.map((make: any) => (
+            <option key={make.id} value={make.id}>{make.name}</option>
+          ))}
+        </select>
       </div>
-
-      {/* ---------- CREATE MODALS (unchanged) ---------- */}
-      {/* Create Make */}
-      {activeModal === "make" && (
-        <Modal title="Create New Make" onClose={closeModal}>
-          <form onSubmit={handleCreateMake} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium">Name *</label>
-              <input
-                type="text"
-                required
-                value={makeForm.name}
-                onChange={(e) => setMakeForm({ ...makeForm, name: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Slug</label>
-              <input
-                type="text"
-                value={makeForm.slug}
-                onChange={(e) => setMakeForm({ ...makeForm, slug: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-                placeholder="auto-generated if empty"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={makeForm.isActive}
-                onChange={(e) => setMakeForm({ ...makeForm, isActive: e.target.checked })}
-              />
-              <label>Active</label>
-            </div>
-            <button
-              type="submit"
-              disabled={creatingMake}
-              className="w-full rounded bg-green-600 py-2 text-white disabled:opacity-50"
-            >
-              {creatingMake ? <Spinner /> : "Create Make"}
-            </button>
-          </form>
-        </Modal>
-      )}
-
-      {/* Create Model */}
-      {activeModal === "model" && (
-        <Modal title="Create New Model" onClose={closeModal}>
-          <form onSubmit={handleCreateModel} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium">Make ID *</label>
-              <input
-                type="text"
-                required
-                value={modelForm.makeId}
-                onChange={(e) => setModelForm({ ...modelForm, makeId: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Name *</label>
-              <input
-                type="text"
-                required
-                value={modelForm.name}
-                onChange={(e) => setModelForm({ ...modelForm, name: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Slug</label>
-              <input
-                type="text"
-                value={modelForm.slug}
-                onChange={(e) => setModelForm({ ...modelForm, slug: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={modelForm.isActive}
-                onChange={(e) => setModelForm({ ...modelForm, isActive: e.target.checked })}
-              />
-              <label>Active</label>
-            </div>
-            <button
-              type="submit"
-              disabled={creatingModel}
-              className="w-full rounded bg-green-600 py-2 text-white disabled:opacity-50"
-            >
-              {creatingModel ? <Spinner /> : "Create Model"}
-            </button>
-          </form>
-        </Modal>
-      )}
-
-      {/* Create Generation */}
-      {activeModal === "generation" && (
-        <Modal title="Create Generation" onClose={closeModal}>
-          <form onSubmit={handleCreateGeneration} className="space-y-4 max-h-[70vh] overflow-y-auto">
-            <div>
-              <label className="block text-sm font-medium">Model ID *</label>
-              <input
-                type="text"
-                required
-                value={genForm.modelId}
-                onChange={(e) => setGenForm({ ...genForm, modelId: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Name *</label>
-              <input
-                type="text"
-                required
-                value={genForm.name}
-                onChange={(e) => setGenForm({ ...genForm, name: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Slug</label>
-              <input
-                type="text"
-                value={genForm.slug}
-                onChange={(e) => setGenForm({ ...genForm, slug: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Chassis Code</label>
-              <input
-                type="text"
-                value={genForm.chassisCode}
-                onChange={(e) => setGenForm({ ...genForm, chassisCode: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Year Start *</label>
-              <input
-                type="number"
-                required
-                value={genForm.yearStart}
-                onChange={(e) => setGenForm({ ...genForm, yearStart: parseInt(e.target.value) })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Year End</label>
-              <input
-                type="number"
-                value={genForm.yearEnd}
-                onChange={(e) => setGenForm({ ...genForm, yearEnd: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={genForm.isActive}
-                onChange={(e) => setGenForm({ ...genForm, isActive: e.target.checked })}
-              />
-              <label>Active</label>
-            </div>
-            <button
-              type="submit"
-              disabled={creatingGeneration}
-              className="w-full rounded bg-green-600 py-2 text-white disabled:opacity-50"
-            >
-              {creatingGeneration ? <Spinner /> : "Create Generation"}
-            </button>
-          </form>
-        </Modal>
-      )}
-
-      {/* Create Engine */}
-      {activeModal === "engine" && (
-        <Modal title="Create Engine" onClose={closeModal}>
-          <form onSubmit={handleCreateEngine} className="space-y-4 max-h-[70vh] overflow-y-auto">
-            <div>
-              <label className="block text-sm font-medium">Generation ID *</label>
-              <input
-                type="text"
-                required
-                value={engineForm.generationId}
-                onChange={(e) => setEngineForm({ ...engineForm, generationId: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Engine Code *</label>
-              <input
-                type="text"
-                required
-                value={engineForm.engineCode}
-                onChange={(e) => setEngineForm({ ...engineForm, engineCode: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Engine Name</label>
-              <input
-                type="text"
-                value={engineForm.engineName}
-                onChange={(e) => setEngineForm({ ...engineForm, engineName: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Fuel Type</label>
-              <input
-                type="text"
-                value={engineForm.fuelType}
-                onChange={(e) => setEngineForm({ ...engineForm, fuelType: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Aspiration</label>
-              <input
-                type="text"
-                value={engineForm.aspiration}
-                onChange={(e) => setEngineForm({ ...engineForm, aspiration: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Cylinders</label>
-              <input
-                type="number"
-                value={engineForm.cylinders}
-                onChange={(e) => setEngineForm({ ...engineForm, cylinders: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Horsepower</label>
-              <input
-                type="number"
-                value={engineForm.horsepower}
-                onChange={(e) => setEngineForm({ ...engineForm, horsepower: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Displacement (cc)</label>
-              <input
-                type="number"
-                value={engineForm.displacementCc}
-                onChange={(e) => setEngineForm({ ...engineForm, displacementCc: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Displacement Label</label>
-              <input
-                type="text"
-                value={engineForm.displacementLabel}
-                onChange={(e) =>
-                  setEngineForm({ ...engineForm, displacementLabel: e.target.value })
-                }
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Drivetrain</label>
-              <input
-                type="text"
-                value={engineForm.drivetrain}
-                onChange={(e) => setEngineForm({ ...engineForm, drivetrain: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Transmission Type</label>
-              <input
-                type="text"
-                value={engineForm.transmissionType}
-                onChange={(e) =>
-                  setEngineForm({ ...engineForm, transmissionType: e.target.value })
-                }
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={engineForm.isActive}
-                onChange={(e) => setEngineForm({ ...engineForm, isActive: e.target.checked })}
-              />
-              <label>Active</label>
-            </div>
-            <button
-              type="submit"
-              disabled={creatingEngine}
-              className="w-full rounded bg-green-600 py-2 text-white disabled:opacity-50"
-            >
-              {creatingEngine ? <Spinner /> : "Create Engine"}
-            </button>
-          </form>
-        </Modal>
-      )}
-
-      {/* Create Trim */}
-      {activeModal === "trim" && (
-        <Modal title="Create Trim" onClose={closeModal}>
-          <form onSubmit={handleCreateTrim} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium">Engine ID *</label>
-              <input
-                type="text"
-                required
-                value={trimForm.engineId}
-                onChange={(e) => setTrimForm({ ...trimForm, engineId: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Name *</label>
-              <input
-                type="text"
-                required
-                value={trimForm.name}
-                onChange={(e) => setTrimForm({ ...trimForm, name: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Body Type</label>
-              <input
-                type="text"
-                value={trimForm.bodyType}
-                onChange={(e) => setTrimForm({ ...trimForm, bodyType: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Doors</label>
-              <input
-                type="number"
-                value={trimForm.doors}
-                onChange={(e) => setTrimForm({ ...trimForm, doors: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={trimForm.isActive}
-                onChange={(e) => setTrimForm({ ...trimForm, isActive: e.target.checked })}
-              />
-              <label>Active</label>
-            </div>
-            <button
-              type="submit"
-              disabled={creatingTrim}
-              className="w-full rounded bg-green-600 py-2 text-white disabled:opacity-50"
-            >
-              {creatingTrim ? <Spinner /> : "Create Trim"}
-            </button>
-          </form>
-        </Modal>
-      )}
-
-      {/* Single Assignment Modal */}
-      {activeModal === "assignSingle" && (
-        <Modal title="Assign Single Product Fitment" onClose={closeModal}>
-          <form onSubmit={handleSingleAssign} className="space-y-4 max-h-[70vh] overflow-y-auto">
-            <div>
-              <label className="block text-sm font-medium">Product ID *</label>
-              <input
-                type="text"
-                required
-                value={singleAssign.productId}
-                onChange={(e) => setSingleAssign({ ...singleAssign, productId: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Fitment Level *</label>
-              <select
-                value={singleAssign.level}
-                onChange={(e) =>
-                  setSingleAssign({ ...singleAssign, level: e.target.value as FitmentLevel })
-                }
-                className="mt-1 w-full rounded border p-2"
-              >
-                <option value="MAKE">Make</option>
-                <option value="MODEL">Model</option>
-                <option value="GENERATION">Generation</option>
-                <option value="ENGINE">Engine</option>
-                <option value="TRIM">Trim</option>
-              </select>
-            </div>
-            {(singleAssign.level === "MAKE" || singleAssign.level === "MODEL") && (
-              <div>
-                <label className="block text-sm font-medium">Make ID</label>
-                <input
-                  type="text"
-                  value={singleAssign.makeId}
-                  onChange={(e) => setSingleAssign({ ...singleAssign, makeId: e.target.value })}
-                  className="mt-1 w-full rounded border p-2"
-                />
-              </div>
-            )}
-            {singleAssign.level === "MODEL" && (
-              <div>
-                <label className="block text-sm font-medium">Model ID</label>
-                <input
-                  type="text"
-                  value={singleAssign.modelId}
-                  onChange={(e) => setSingleAssign({ ...singleAssign, modelId: e.target.value })}
-                  className="mt-1 w-full rounded border p-2"
-                />
-              </div>
-            )}
-            {(singleAssign.level === "GENERATION" ||
-              singleAssign.level === "ENGINE" ||
-              singleAssign.level === "TRIM") && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium">Generation ID</label>
-                  <input
-                    type="text"
-                    value={singleAssign.generationId}
-                    onChange={(e) =>
-                      setSingleAssign({ ...singleAssign, generationId: e.target.value })
-                    }
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-              </>
-            )}
-            {(singleAssign.level === "ENGINE" || singleAssign.level === "TRIM") && (
-              <div>
-                <label className="block text-sm font-medium">Engine ID</label>
-                <input
-                  type="text"
-                  value={singleAssign.engineId}
-                  onChange={(e) => setSingleAssign({ ...singleAssign, engineId: e.target.value })}
-                  className="mt-1 w-full rounded border p-2"
-                />
-              </div>
-            )}
-            {singleAssign.level === "TRIM" && (
-              <div>
-                <label className="block text-sm font-medium">Trim ID</label>
-                <input
-                  type="text"
-                  value={singleAssign.trimId}
-                  onChange={(e) => setSingleAssign({ ...singleAssign, trimId: e.target.value })}
-                  className="mt-1 w-full rounded border p-2"
-                />
-              </div>
-            )}
-            <div>
-              <label className="block text-sm font-medium">Year Start</label>
-              <input
-                type="number"
-                value={singleAssign.yearStart}
-                onChange={(e) => setSingleAssign({ ...singleAssign, yearStart: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Year End</label>
-              <input
-                type="number"
-                value={singleAssign.yearEnd}
-                onChange={(e) => setSingleAssign({ ...singleAssign, yearEnd: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Notes</label>
-              <textarea
-                value={singleAssign.notes}
-                onChange={(e) => setSingleAssign({ ...singleAssign, notes: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-                rows={2}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Position</label>
-              <input
-                type="text"
-                value={singleAssign.position}
-                onChange={(e) => setSingleAssign({ ...singleAssign, position: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Quantity Required</label>
-              <input
-                type="number"
-                value={singleAssign.quantityRequired}
-                onChange={(e) =>
-                  setSingleAssign({ ...singleAssign, quantityRequired: e.target.value })
-                }
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={singleAssign.isUniversal}
-                onChange={(e) =>
-                  setSingleAssign({ ...singleAssign, isUniversal: e.target.checked })
-                }
-              />
-              <label>Universal fitment</label>
-            </div>
-            <button
-              type="submit"
-              disabled={assigningSingle}
-              className="w-full rounded bg-blue-600 py-2 text-white disabled:opacity-50"
-            >
-              {assigningSingle ? <Spinner /> : "Assign Fitment"}
-            </button>
-          </form>
-        </Modal>
-      )}
-
-      {/* Bulk Assignment Modal */}
-      {activeModal === "assignBulk" && (
-        <Modal title="Bulk Assign Fitments (by Trim IDs)" onClose={closeModal}>
-          <form onSubmit={handleBulkAssign} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium">Product ID *</label>
-              <input
-                type="text"
-                required
-                value={bulkAssign.productId}
-                onChange={(e) => setBulkAssign({ ...bulkAssign, productId: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">
-                Trim IDs (comma separated) *
-              </label>
-              <textarea
-                required
-                value={bulkAssign.trimIds}
-                onChange={(e) => setBulkAssign({ ...bulkAssign, trimIds: e.target.value })}
-                placeholder="trim_123, trim_456, trim_789"
-                className="mt-1 w-full rounded border p-2"
-                rows={3}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Notes</label>
-              <input
-                type="text"
-                value={bulkAssign.notes}
-                onChange={(e) => setBulkAssign({ ...bulkAssign, notes: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Position</label>
-              <input
-                type="text"
-                value={bulkAssign.position}
-                onChange={(e) => setBulkAssign({ ...bulkAssign, position: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium">Quantity Required</label>
-              <input
-                type="number"
-                value={bulkAssign.quantityRequired}
-                onChange={(e) => setBulkAssign({ ...bulkAssign, quantityRequired: e.target.value })}
-                className="mt-1 w-full rounded border p-2"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={assigningBulk}
-              className="w-full rounded bg-indigo-600 py-2 text-white disabled:opacity-50"
-            >
-              {assigningBulk ? <Spinner /> : "Bulk Assign"}
-            </button>
-          </form>
-        </Modal>
-      )}
-
-      {/* ---------- EDIT MODAL (reuses same forms) ---------- */}
-      {editingItem && (
-        <Modal title={`Edit ${editingItem.type.charAt(0).toUpperCase() + editingItem.type.slice(1)}`} onClose={closeEditModal}>
-          <form onSubmit={handleUpdate} className="space-y-4 max-h-[70vh] overflow-y-auto">
-            {editingItem.type === "make" && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium">Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={makeForm.name}
-                    onChange={(e) => setMakeForm({ ...makeForm, name: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Slug</label>
-                  <input
-                    type="text"
-                    value={makeForm.slug}
-                    onChange={(e) => setMakeForm({ ...makeForm, slug: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={makeForm.isActive}
-                    onChange={(e) => setMakeForm({ ...makeForm, isActive: e.target.checked })}
-                  />
-                  <label>Active</label>
-                </div>
-              </>
-            )}
-
-            {editingItem.type === "model" && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium">Make ID *</label>
-                  <input
-                    type="text"
-                    required
-                    value={modelForm.makeId}
-                    onChange={(e) => setModelForm({ ...modelForm, makeId: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={modelForm.name}
-                    onChange={(e) => setModelForm({ ...modelForm, name: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Slug</label>
-                  <input
-                    type="text"
-                    value={modelForm.slug}
-                    onChange={(e) => setModelForm({ ...modelForm, slug: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={modelForm.isActive}
-                    onChange={(e) => setModelForm({ ...modelForm, isActive: e.target.checked })}
-                  />
-                  <label>Active</label>
-                </div>
-              </>
-            )}
-
-            {editingItem.type === "generation" && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium">Model ID *</label>
-                  <input
-                    type="text"
-                    required
-                    value={genForm.modelId}
-                    onChange={(e) => setGenForm({ ...genForm, modelId: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={genForm.name}
-                    onChange={(e) => setGenForm({ ...genForm, name: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Slug</label>
-                  <input
-                    type="text"
-                    value={genForm.slug}
-                    onChange={(e) => setGenForm({ ...genForm, slug: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Chassis Code</label>
-                  <input
-                    type="text"
-                    value={genForm.chassisCode}
-                    onChange={(e) => setGenForm({ ...genForm, chassisCode: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Year Start *</label>
-                  <input
-                    type="number"
-                    required
-                    value={genForm.yearStart}
-                    onChange={(e) => setGenForm({ ...genForm, yearStart: parseInt(e.target.value) })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Year End</label>
-                  <input
-                    type="number"
-                    value={genForm.yearEnd}
-                    onChange={(e) => setGenForm({ ...genForm, yearEnd: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={genForm.isActive}
-                    onChange={(e) => setGenForm({ ...genForm, isActive: e.target.checked })}
-                  />
-                  <label>Active</label>
-                </div>
-              </>
-            )}
-
-            {editingItem.type === "engine" && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium">Generation ID *</label>
-                  <input
-                    type="text"
-                    required
-                    value={engineForm.generationId}
-                    onChange={(e) => setEngineForm({ ...engineForm, generationId: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Engine Code *</label>
-                  <input
-                    type="text"
-                    required
-                    value={engineForm.engineCode}
-                    onChange={(e) => setEngineForm({ ...engineForm, engineCode: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Engine Name</label>
-                  <input
-                    type="text"
-                    value={engineForm.engineName}
-                    onChange={(e) => setEngineForm({ ...engineForm, engineName: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Fuel Type</label>
-                  <input
-                    type="text"
-                    value={engineForm.fuelType}
-                    onChange={(e) => setEngineForm({ ...engineForm, fuelType: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Aspiration</label>
-                  <input
-                    type="text"
-                    value={engineForm.aspiration}
-                    onChange={(e) => setEngineForm({ ...engineForm, aspiration: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Cylinders</label>
-                  <input
-                    type="number"
-                    value={engineForm.cylinders}
-                    onChange={(e) => setEngineForm({ ...engineForm, cylinders: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Horsepower</label>
-                  <input
-                    type="number"
-                    value={engineForm.horsepower}
-                    onChange={(e) => setEngineForm({ ...engineForm, horsepower: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Displacement (cc)</label>
-                  <input
-                    type="number"
-                    value={engineForm.displacementCc}
-                    onChange={(e) => setEngineForm({ ...engineForm, displacementCc: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Displacement Label</label>
-                  <input
-                    type="text"
-                    value={engineForm.displacementLabel}
-                    onChange={(e) => setEngineForm({ ...engineForm, displacementLabel: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Drivetrain</label>
-                  <input
-                    type="text"
-                    value={engineForm.drivetrain}
-                    onChange={(e) => setEngineForm({ ...engineForm, drivetrain: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Transmission Type</label>
-                  <input
-                    type="text"
-                    value={engineForm.transmissionType}
-                    onChange={(e) => setEngineForm({ ...engineForm, transmissionType: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={engineForm.isActive}
-                    onChange={(e) => setEngineForm({ ...engineForm, isActive: e.target.checked })}
-                  />
-                  <label>Active</label>
-                </div>
-              </>
-            )}
-
-            {editingItem.type === "trim" && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium">Engine ID *</label>
-                  <input
-                    type="text"
-                    required
-                    value={trimForm.engineId}
-                    onChange={(e) => setTrimForm({ ...trimForm, engineId: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={trimForm.name}
-                    onChange={(e) => setTrimForm({ ...trimForm, name: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Body Type</label>
-                  <input
-                    type="text"
-                    value={trimForm.bodyType}
-                    onChange={(e) => setTrimForm({ ...trimForm, bodyType: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium">Doors</label>
-                  <input
-                    type="number"
-                    value={trimForm.doors}
-                    onChange={(e) => setTrimForm({ ...trimForm, doors: e.target.value })}
-                    className="mt-1 w-full rounded border p-2"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={trimForm.isActive}
-                    onChange={(e) => setTrimForm({ ...trimForm, isActive: e.target.checked })}
-                  />
-                  <label>Active</label>
-                </div>
-              </>
-            )}
-
-            <button
-              type="submit"
-              className="w-full rounded bg-blue-600 py-2 text-white hover:bg-blue-700"
-            >
-              Update {editingItem.type}
-            </button>
-          </form>
-        </Modal>
-      )}
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Model</label>
+        <select
+          value={selectedModelId || ''}
+          onChange={(e) => onModelChange(e.target.value)}
+          disabled={!selectedMakeId}
+          className="w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm disabled:bg-gray-100"
+        >
+          <option value="">Select Model</option>
+          {models.map((model: any) => (
+            <option key={model.id} value={model.id}>{model.name}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Generation</label>
+        <select
+          value={selectedGenerationId || ''}
+          onChange={(e) => onGenerationChange(e.target.value)}
+          disabled={!selectedModelId}
+          className="w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm disabled:bg-gray-100"
+        >
+          <option value="">Select Generation</option>
+          {generations.map((gen: any) => (
+            <option key={gen.id} value={gen.id}>{gen.name}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Engine</label>
+        <select
+          value={selectedEngineId || ''}
+          onChange={(e) => onEngineChange(e.target.value)}
+          disabled={!selectedGenerationId}
+          className="w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm disabled:bg-gray-100"
+        >
+          <option value="">Select Engine</option>
+          {engines.map((eng: any) => (
+            <option key={eng.id} value={eng.id}>{eng.name}</option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="mb-1 block text-sm font-medium text-gray-700">Trim</label>
+        <select
+          value={selectedTrimId || ''}
+          onChange={(e) => onTrimChange(e.target.value)}
+          disabled={!selectedEngineId}
+          className="w-full rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm disabled:bg-gray-100"
+        >
+          <option value="">Select Trim</option>
+          {trims.map((trim: any) => (
+            <option key={trim.id} value={trim.id}>{trim.name}</option>
+          ))}
+        </select>
+      </div>
     </div>
   );
 };
 
-export default AdminFitments;
+// ----------------------------------------------------------------------
+// Main Admin Component
+// ----------------------------------------------------------------------
+const AdminFitmentSystem: React.FC = () => {
+  // Active tab
+  const [activeTab, setActiveTab] = useState<'configs' | 'rules' | 'fitments' | 'index' | 'logs'>('configs');
+
+  // Product selector (for fitments, index, logs)
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const { data: products = [] } = useGetProductsQuery();
+
+  // --------------------------------------------------------------------
+  // CONFIGS
+  // --------------------------------------------------------------------
+  const { data: configs = [], refetch: refetchConfigs } = useGetConfigsQuery();
+  const [createConfig, { isLoading: creatingConfig }] = useCreateConfigMutation();
+  const [updateConfig] = useUpdateConfigMutation();
+  const [deleteConfig] = useDeleteConfigMutation();
+  const [showConfigForm, setShowConfigForm] = useState(false);
+  const [editingConfig, setEditingConfig] = useState<FitmentConfig | null>(null);
+
+  const emptyConfig = (): FitmentConfig => ({
+    id: '',
+    name: '',
+    description: '',
+    isActive: true,
+    allowUniversalFallback: true,
+    allowCrossGenerationMatch: false,
+    allowEngineFallback: false,
+    weightMake: 100,
+    weightModel: 200,
+    weightGeneration: 300,
+    weightEngine: 400,
+    weightTrim: 500,
+    weightYear: 250,
+    enableFitmentIndexing: true,
+    enableTextSearchFallback: true,
+  });
+
+  const [configForm, setConfigForm] = useState<FitmentConfig>(emptyConfig());
+
+  const handleConfigSubmit = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    try {
+      if (editingConfig) {
+        await updateConfig({ id: editingConfig.id, data: configForm }).unwrap();
+      } else {
+        await createConfig(configForm).unwrap();
+      }
+      refetchConfigs();
+      setShowConfigForm(false);
+      setEditingConfig(null);
+      setConfigForm(emptyConfig());
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save config');
+    }
+  };
+
+  const handleDeleteConfig = async (id: string) => {
+    if (!confirm('Delete this configuration?')) return;
+    try {
+      await deleteConfig(id).unwrap();
+      refetchConfigs();
+    } catch (err) {
+      console.error(err);
+      alert('Delete failed');
+    }
+  };
+
+  // --------------------------------------------------------------------
+  // RULES
+  // --------------------------------------------------------------------
+  const { data: rules = [], refetch: refetchRules } = useGetRulesQuery();
+  const [createRule, { isLoading: creatingRule }] = useCreateRuleMutation();
+  const [updateRule] = useUpdateRuleMutation();
+  const [deleteRule] = useDeleteRuleMutation();
+  const [showRuleForm, setShowRuleForm] = useState(false);
+  const [editingRule, setEditingRule] = useState<FitmentRule | null>(null);
+
+  const emptyRule = (): FitmentRule => ({
+    id: '',
+    type: 'EXACT',
+    level: 'EXACT',
+    requiresMake: false,
+    requiresModel: false,
+    requiresGeneration: false,
+    requiresEngine: false,
+    requiresTrim: false,
+    requiresYear: false,
+    allowYearRange: true,
+    strictMatching: false,
+    priority: 0,
+  });
+
+  const [ruleForm, setRuleForm] = useState<FitmentRule>(emptyRule());
+
+  const handleRuleSubmit = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    try {
+      if (editingRule) {
+        await updateRule({ id: editingRule.id, data: ruleForm }).unwrap();
+      } else {
+        await createRule(ruleForm).unwrap();
+      }
+      refetchRules();
+      setShowRuleForm(false);
+      setEditingRule(null);
+      setRuleForm(emptyRule());
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save rule');
+    }
+  };
+
+  const handleDeleteRule = async (id: string) => {
+    if (!confirm('Delete this rule?')) return;
+    try {
+      await deleteRule(id).unwrap();
+      refetchRules();
+    } catch (err) {
+      console.error(err);
+      alert('Delete failed');
+    }
+  };
+
+  // --------------------------------------------------------------------
+  // PRODUCT FITMENTS
+  // --------------------------------------------------------------------
+  const {
+    data: fitments = [],
+    refetch: refetchFitments,
+  } = useGetProductFitmentsQuery(selectedProductId, { skip: !selectedProductId });
+  const [createFitment] = useCreateProductFitmentMutation();
+  const [updateFitment] = useUpdateProductFitmentMutation();
+  const [deleteFitment] = useDeleteProductFitmentMutation();
+  const [showFitmentForm, setShowFitmentForm] = useState(false);
+  const [editingFitment, setEditingFitment] = useState<ProductFitment | null>(null);
+
+  const emptyFitment = (): Partial<ProductFitment> => ({
+    level: 'EXACT',
+    type: 'EXACT',
+    isUniversal: false,
+    isVerified: false,
+    quantityRequired: 1,
+  });
+
+  const [fitmentForm, setFitmentForm] = useState<Partial<ProductFitment>>(emptyFitment());
+
+  const handleFitmentSubmit = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!selectedProductId) {
+      alert('Please select a product first');
+      return;
+    }
+    const payload = {
+      ...fitmentForm,
+      productId: selectedProductId,
+    };
+    try {
+      if (editingFitment) {
+        await updateFitment({ id: editingFitment.id, data: payload }).unwrap();
+      } else {
+        await createFitment(payload).unwrap();
+      }
+      refetchFitments();
+      setShowFitmentForm(false);
+      setEditingFitment(null);
+      setFitmentForm(emptyFitment());
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save fitment');
+    }
+  };
+
+  const handleDeleteFitment = async (id: string) => {
+    if (!confirm('Remove this fitment?')) return;
+    try {
+      await deleteFitment(id).unwrap();
+      refetchFitments();
+    } catch (err) {
+      console.error(err);
+      alert('Delete failed');
+    }
+  };
+
+  // Reset fitment form when editing changes
+  useEffect(() => {
+    if (editingFitment) {
+      setFitmentForm(editingFitment);
+    } else {
+      setFitmentForm(emptyFitment());
+    }
+  }, [editingFitment]);
+
+  // --------------------------------------------------------------------
+  // INDEX & LOGS (readonly)
+  // --------------------------------------------------------------------
+  const { data: indexEntries = [] } = useGetProductIndexQuery(selectedProductId, { skip: !selectedProductId });
+  const { data: logs = [] } = useGetLogsQuery(selectedProductId || undefined);
+
+  // --------------------------------------------------------------------
+  // RENDER
+  // --------------------------------------------------------------------
+  return (
+    <div className="min-h-screen bg-linear-to-br from-gray-50 to-gray-100 p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        {/* Header */}
+        <div className="rounded-2xl bg-white p-6 shadow-sm">
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900">🔧 Fitment System</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Manage configurations, rules, product fitments, indexes, and resolution logs.
+          </p>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex flex-wrap gap-2 border-b border-gray-200 bg-white px-4 pt-2 shadow-sm">
+          {(['configs', 'rules', 'fitments', 'index', 'logs'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`rounded-t-lg px-5 py-2.5 text-sm font-medium transition ${
+                activeTab === tab
+                  ? 'border-b-2 border-green-600 text-green-700'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        {/* Product selector (visible for fitments, index, logs) */}
+        {(activeTab === 'fitments' || activeTab === 'index' || activeTab === 'logs') && (
+          <div className="rounded-xl bg-white p-4 shadow-sm">
+            <label className="mb-1 block text-sm font-medium text-gray-700">Select Product</label>
+            <select
+              value={selectedProductId}
+              onChange={(e) => setSelectedProductId(e.target.value)}
+              className="w-full max-w-md rounded-lg border border-gray-300 px-4 py-2.5 shadow-sm"
+            >
+              <option value="">-- Choose a product --</option>
+              {products.map((p: any) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} (SKU: {p.sku || p.id})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* ============================ CONFIGS ============================ */}
+        {activeTab === 'configs' && (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  setEditingConfig(null);
+                  setConfigForm(emptyConfig());
+                  setShowConfigForm(!showConfigForm);
+                }}
+                className="rounded-xl bg-green-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-700"
+              >
+                {showConfigForm ? '✖ Cancel' : '+ New Config'}
+              </button>
+            </div>
+
+            {showConfigForm && (
+              <form onSubmit={handleConfigSubmit} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-lg">
+                <h2 className="text-xl font-semibold">{editingConfig ? 'Edit Config' : 'Create Config'}</h2>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <input
+                    type="text"
+                    placeholder="Name *"
+                    value={configForm.name}
+                    onChange={(e) => setConfigForm({ ...configForm, name: e.target.value })}
+                    className="rounded-lg border border-gray-300 px-4 py-2"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="Description"
+                    value={configForm.description || ''}
+                    onChange={(e) => setConfigForm({ ...configForm, description: e.target.value })}
+                    className="rounded-lg border border-gray-300 px-4 py-2"
+                  />
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={configForm.isActive}
+                      onChange={(e) => setConfigForm({ ...configForm, isActive: e.target.checked })}
+                    /> Active
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={configForm.allowUniversalFallback}
+                      onChange={(e) => setConfigForm({ ...configForm, allowUniversalFallback: e.target.checked })}
+                    /> Universal Fallback
+                  </label>
+                  {/* Add other checkboxes and weight fields as needed – concise for brevity */}
+                </div>
+                <div className="mt-6 flex gap-3">
+                  <button type="submit" disabled={creatingConfig} className="rounded-lg bg-green-600 px-6 py-2 text-white">
+                    Save
+                  </button>
+                  <button type="button" onClick={() => setShowConfigForm(false)} className="rounded-lg border px-6 py-2">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Active</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Universal Fallback</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {configs.map((cfg: FitmentConfig) => (
+                    <tr key={cfg.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm font-medium text-gray-900">{cfg.name}</td>
+                      <td className="px-6 py-4 text-sm">{cfg.isActive ? '✅' : '❌'}</td>
+                      <td className="px-6 py-4 text-sm">{cfg.allowUniversalFallback ? 'Yes' : 'No'}</td>
+                      <td className="px-6 py-4 text-right space-x-2">
+                        <button
+                          onClick={() => {
+                            setEditingConfig(cfg);
+                            setConfigForm(cfg);
+                            setShowConfigForm(true);
+                          }}
+                          className="text-blue-600 hover:underline"
+                        >
+                          Edit
+                        </button>
+                        <button onClick={() => handleDeleteConfig(cfg.id)} className="text-red-600 hover:underline">
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ============================ RULES ============================ */}
+        {activeTab === 'rules' && (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  setEditingRule(null);
+                  setRuleForm(emptyRule());
+                  setShowRuleForm(!showRuleForm);
+                }}
+                className="rounded-xl bg-green-600 px-5 py-2.5 text-sm font-semibold text-white"
+              >
+                {showRuleForm ? '✖ Cancel' : '+ New Rule'}
+              </button>
+            </div>
+
+            {showRuleForm && (
+              <form onSubmit={handleRuleSubmit} className="rounded-2xl border bg-white p-6 shadow-lg">
+                <h2 className="text-xl font-semibold">{editingRule ? 'Edit Rule' : 'Create Rule'}</h2>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <select
+                    value={ruleForm.type}
+                    onChange={(e) => setRuleForm({ ...ruleForm, type: e.target.value as FitmentType })}
+                    className="rounded-lg border p-2"
+                  >
+                    <option value="EXACT">EXACT</option>
+                    <option value="ALTERNATIVE">ALTERNATIVE</option>
+                    <option value="UNIVERSAL">UNIVERSAL</option>
+                  </select>
+                  <select
+                    value={ruleForm.level}
+                    onChange={(e) => setRuleForm({ ...ruleForm, level: e.target.value as FitmentLevel })}
+                    className="rounded-lg border p-2"
+                  >
+                    <option value="EXACT">EXACT</option>
+                    <option value="UPSELL">UPSELL</option>
+                    <option value="CROSSSELL">CROSSSELL</option>
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="Priority"
+                    value={ruleForm.priority}
+                    onChange={(e) => setRuleForm({ ...ruleForm, priority: parseInt(e.target.value) || 0 })}
+                    className="rounded-lg border p-2"
+                  />
+                  {/* Add checkbox fields for requiresMake, etc. */}
+                </div>
+                <div className="mt-6 flex gap-3">
+                  <button type="submit" disabled={creatingRule} className="rounded-lg bg-green-600 px-6 py-2 text-white">
+                    Save
+                  </button>
+                  <button type="button" onClick={() => setShowRuleForm(false)} className="rounded-lg border px-6 py-2">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="overflow-hidden rounded-2xl border bg-white">
+              <table className="min-w-full divide-y">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium">Type</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium">Level</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium">Priority</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rules.map((rule: FitmentRule) => (
+                    <tr key={rule.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 text-sm">{rule.type}</td>
+                      <td className="px-6 py-4 text-sm">{rule.level}</td>
+                      <td className="px-6 py-4 text-sm">{rule.priority}</td>
+                      <td className="px-6 py-4 text-right space-x-2">
+                        <button
+                          onClick={() => {
+                            setEditingRule(rule);
+                            setRuleForm(rule);
+                            setShowRuleForm(true);
+                          }}
+                          className="text-blue-600 hover:underline"
+                        >
+                          Edit
+                        </button>
+                        <button onClick={() => handleDeleteRule(rule.id)} className="text-red-600 hover:underline">
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ============================ PRODUCT FITMENTS ============================ */}
+        {activeTab === 'fitments' && (
+          <div className="space-y-4">
+            {!selectedProductId ? (
+              <div className="rounded-xl bg-yellow-50 p-4 text-yellow-800">Please select a product above.</div>
+            ) : (
+              <>
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      setEditingFitment(null);
+                      setFitmentForm(emptyFitment());
+                      setShowFitmentForm(!showFitmentForm);
+                    }}
+                    className="rounded-xl bg-green-600 px-5 py-2.5 text-sm font-semibold text-white"
+                  >
+                    {showFitmentForm ? '✖ Cancel' : '+ Add Fitment'}
+                  </button>
+                </div>
+
+                {showFitmentForm && (
+                  <form onSubmit={handleFitmentSubmit} className="rounded-2xl border bg-white p-6 shadow-lg">
+                    <h2 className="text-xl font-semibold">{editingFitment ? 'Edit Fitment' : 'New Fitment'}</h2>
+                    <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                      <select
+                        value={fitmentForm.level}
+                        onChange={(e) => setFitmentForm({ ...fitmentForm, level: e.target.value as FitmentLevel })}
+                        className="rounded-lg border p-2"
+                      >
+                        <option value="EXACT">EXACT</option>
+                        <option value="UPSELL">UPSELL</option>
+                        <option value="CROSSSELL">CROSSSELL</option>
+                      </select>
+                      <select
+                        value={fitmentForm.type}
+                        onChange={(e) => setFitmentForm({ ...fitmentForm, type: e.target.value as FitmentType })}
+                        className="rounded-lg border p-2"
+                      >
+                        <option value="EXACT">EXACT</option>
+                        <option value="ALTERNATIVE">ALTERNATIVE</option>
+                        <option value="UNIVERSAL">UNIVERSAL</option>
+                      </select>
+                      <div className="col-span-2">
+                        <VehicleSelector
+                          selectedMakeId={fitmentForm.makeId || ''}
+                          onMakeChange={(makeId) => setFitmentForm({ ...fitmentForm, makeId })}
+                          selectedModelId={fitmentForm.modelId || ''}
+                          onModelChange={(modelId) => setFitmentForm({ ...fitmentForm, modelId })}
+                          selectedGenerationId={fitmentForm.generationId || ''}
+                          onGenerationChange={(genId) => setFitmentForm({ ...fitmentForm, generationId: genId })}
+                          selectedEngineId={fitmentForm.engineId || ''}
+                          onEngineChange={(engId) => setFitmentForm({ ...fitmentForm, engineId: engId })}
+                          selectedTrimId={fitmentForm.trimId || ''}
+                          onTrimChange={(trimId) => setFitmentForm({ ...fitmentForm, trimId })}
+                        />
+                      </div>
+                      <div className="flex gap-4">
+                        <input
+                          type="number"
+                          placeholder="Year Start"
+                          value={fitmentForm.yearStart || ''}
+                          onChange={(e) => setFitmentForm({ ...fitmentForm, yearStart: parseInt(e.target.value) || undefined })}
+                          className="rounded-lg border p-2"
+                        />
+                        <input
+                          type="number"
+                          placeholder="Year End"
+                          value={fitmentForm.yearEnd || ''}
+                          onChange={(e) => setFitmentForm({ ...fitmentForm, yearEnd: parseInt(e.target.value) || undefined })}
+                          className="rounded-lg border p-2"
+                        />
+                      </div>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={fitmentForm.isUniversal || false}
+                          onChange={(e) => setFitmentForm({ ...fitmentForm, isUniversal: e.target.checked })}
+                        /> Universal
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={fitmentForm.isVerified || false}
+                          onChange={(e) => setFitmentForm({ ...fitmentForm, isVerified: e.target.checked })}
+                        /> Verified
+                      </label>
+                      <textarea
+                        placeholder="Notes"
+                        value={fitmentForm.notes || ''}
+                        onChange={(e) => setFitmentForm({ ...fitmentForm, notes: e.target.value })}
+                        className="col-span-2 rounded-lg border p-2"
+                        rows={2}
+                      />
+                    </div>
+                    <div className="mt-6 flex gap-3">
+                      <button type="submit" className="rounded-lg bg-green-600 px-6 py-2 text-white">
+                        Save
+                      </button>
+                      <button type="button" onClick={() => setShowFitmentForm(false)} className="rounded-lg border px-6 py-2">
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <div className="overflow-hidden rounded-2xl border bg-white">
+                  <table className="min-w-full divide-y">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium">Level/Type</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium">Vehicle</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium">Years</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium">Universal</th>
+                        <th className="px-6 py-3 text-right text-xs font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fitments.map((f: ProductFitment) => (
+                        <tr key={f.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 text-sm">{f.level}/{f.type}</td>
+                          <td className="px-6 py-4 text-sm">
+                            {f.make?.name} {f.model?.name} {f.generation?.name} {f.engine?.name} {f.trim?.name}
+                          </td>
+                          <td className="px-6 py-4 text-sm">{f.yearStart}{f.yearEnd ? `-${f.yearEnd}` : ''}</td>
+                          <td className="px-6 py-4 text-sm">{f.isUniversal ? 'Yes' : 'No'}</td>
+                          <td className="px-6 py-4 text-right space-x-2">
+                            <button onClick={() => { setEditingFitment(f); setShowFitmentForm(true); }} className="text-blue-600 hover:underline">Edit</button>
+                            <button onClick={() => handleDeleteFitment(f.id)} className="text-red-600 hover:underline">Delete</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ============================ INDEX ============================ */}
+        {activeTab === 'index' && (
+          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+            {!selectedProductId ? (
+              <div className="text-yellow-800">Select a product to see its fitment index.</div>
+            ) : indexEntries.length === 0 ? (
+              <div className="text-gray-500">No index entries for this product.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y">
+                  <thead>
+                    <tr>
+                      <th className="px-4 py-2 text-left">Make</th>
+                      <th className="px-4 py-2 text-left">Model</th>
+                      <th className="px-4 py-2 text-left">Generation</th>
+                      <th className="px-4 py-2 text-left">Engine</th>
+                      <th className="px-4 py-2 text-left">Trim</th>
+                      <th className="px-4 py-2 text-left">Year</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {indexEntries.map((entry: any) => (
+                      <tr key={entry.id}>
+                        <td className="px-4 py-2">{entry.make}</td>
+                        <td className="px-4 py-2">{entry.model}</td>
+                        <td className="px-4 py-2">{entry.generation}</td>
+                        <td className="px-4 py-2">{entry.engineCode}</td>
+                        <td className="px-4 py-2">{entry.trim}</td>
+                        <td className="px-4 py-2">{entry.year}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============================ LOGS ============================ */}
+        {activeTab === 'logs' && (
+          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+            {!selectedProductId ? (
+              <div className="text-yellow-800">Select a product to view its resolution logs.</div>
+            ) : logs.length === 0 ? (
+              <div className="text-gray-500">No logs found.</div>
+            ) : (
+              <div className="space-y-3">
+                {logs.map((log: any) => (
+                  <div key={log.id} className="rounded-lg border-l-4 border-gray-200 bg-gray-50 p-4">
+                    <div className="flex justify-between">
+                      <span className="font-mono text-sm">{new Date(log.createdAt).toLocaleString()}</span>
+                      <span className={`text-xs font-semibold ${log.matched ? 'text-green-700' : 'text-red-600'}`}>
+                        {log.matched ? 'Matched' : 'No match'}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-sm">
+                      <div><strong>Input:</strong> {log.inputMake} {log.inputModel} {log.inputGeneration} {log.inputEngine} {log.inputTrim} ({log.inputYear})</div>
+                      <div><strong>Result:</strong> Level {log.matchedLevel}, Type {log.matchedType}, Score {log.score}</div>
+                      {log.resolutionPath && <div><strong>Path:</strong> {log.resolutionPath}</div>}
+                      {log.notes && <div className="text-gray-500">{log.notes}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default AdminFitmentSystem;

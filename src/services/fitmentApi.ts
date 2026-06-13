@@ -2,398 +2,290 @@ import { createApi } from "@reduxjs/toolkit/query/react";
 
 import { axiosBaseQuery } from "../api/axiosBaseQuery";
 
-import type {
-  FitmentLevel,
-  ProductFitment,
-  VehicleEngine,
-  VehicleGeneration,
-  VehicleMake,
-  VehicleModel,
-  VehicleTrim,
-} from "../types/fitment.types";
-
 export const fitmentApi = createApi({
   reducerPath: "fitmentApi",
 
   baseQuery: axiosBaseQuery(),
 
   tagTypes: [
-    "VehicleTree",
-    "Fitment",
-    "Products",
+    "FitmentConfig",
+    "FitmentRule",
+    "ProductFitment",
+    "FitmentIndex",
+    "FitmentLog",
   ],
 
   endpoints: (builder) => ({
-    // VEHICLE MAKES
-    createMake: builder.mutation<
-      VehicleMake,
-      {
-        name: string;
-        slug?: string;
-        isActive?: boolean;
-      }
+    // CONFIGS
+    getConfigs: builder.query<
+      any[],
+      void
     >({
-      query: (data) => ({
-        url: "/api/fitments/makes",
-        method: "POST",
-        data,
+      query: () => ({
+        url: "/api/fitments/configs",
+        method: "GET",
       }),
 
-      invalidatesTags: ["VehicleTree"],
+      providesTags: ["FitmentConfig"],
     }),
 
-    // VEHICLE MODELS
-    createModel: builder.mutation<
-      VehicleModel,
-      {
-        makeId: string;
-        name: string;
-        slug?: string;
-        isActive?: boolean;
-      }
+    createConfig: builder.mutation<
+      any,
+      any
     >({
       query: (data) => ({
-        url: "/api/fitments/models",
-        method: "POST",
-        data,
-      }),
-
-      invalidatesTags: ["VehicleTree"],
-    }),
-
-    // VEHICLE GENERATIONS
-    createGeneration: builder.mutation<
-      VehicleGeneration,
-      {
-        modelId: string;
-        name: string;
-        slug?: string;
-        chassisCode?: string;
-        yearStart: number;
-        yearEnd?: number;
-        isActive?: boolean;
-      }
-    >({
-      query: (data) => ({
-        url: "/api/fitments/generations",
-        method: "POST",
-        data,
-      }),
-
-      invalidatesTags: ["VehicleTree"],
-    }),
-
-    // VEHICLE ENGINES
-    createEngine: builder.mutation<
-      VehicleEngine,
-      {
-        generationId: string;
-        engineCode: string;
-        engineName?: string;
-        fuelType?: string;
-        aspiration?: string;
-        cylinders?: number;
-        horsepower?: number;
-        displacementCc?: number;
-        displacementLabel?: string;
-        drivetrain?: string;
-        transmissionType?: string;
-        isActive?: boolean;
-      }
-    >({
-      query: (data) => ({
-        url: "/api/fitments/engines",
-        method: "POST",
-        data,
-      }),
-
-      invalidatesTags: ["VehicleTree"],
-    }),
-
-    // VEHICLE TRIMS
-    createTrim: builder.mutation<
-      VehicleTrim,
-      {
-        engineId: string;
-        name: string;
-        bodyType?: string;
-        doors?: number;
-        isActive?: boolean;
-      }
-    >({
-      query: (data) => ({
-        url: "/api/fitments/trims",
-        method: "POST",
-        data,
-      }),
-
-      invalidatesTags: ["VehicleTree"],
-    }),
-
-    // ASSIGN SINGLE PRODUCT FITMENT
-    assignProductFitment: builder.mutation<
-      ProductFitment,
-      {
-        productId: string;
-        level: FitmentLevel;
-        makeId?: string;
-        modelId?: string;
-        generationId?: string;
-        engineId?: string;
-        trimId?: string;
-        yearStart?: number;
-        yearEnd?: number;
-        notes?: string;
-        position?: string;
-        quantityRequired?: number;
-        isUniversal?: boolean;
-      }
-    >({
-      query: (data) => ({
-        url: "/api/fitments/products/assign",
+        url: "/api/fitments/configs",
         method: "POST",
         data,
       }),
 
       invalidatesTags: [
-        "Fitment",
-        "Products",
+        "FitmentConfig",
       ],
     }),
 
-    // BULK ASSIGN PRODUCT FITMENTS
-    bulkAssignProductFitment:
+    updateConfig: builder.mutation<
+      any,
+      {
+        id: string;
+        data: any;
+      }
+    >({
+      query: ({
+        id,
+        data,
+      }) => ({
+        url: `/api/fitments/configs/${id}`,
+        method: "PUT",
+        data,
+      }),
+
+      invalidatesTags: [
+        "FitmentConfig",
+      ],
+    }),
+
+    deleteConfig: builder.mutation<
+      void,
+      string
+    >({
+      query: (id) => ({
+        url: `/api/fitments/configs/${id}`,
+        method: "DELETE",
+      }),
+
+      invalidatesTags: [
+        "FitmentConfig",
+      ],
+    }),
+    // RULES
+    getRules: builder.query<
+      any[],
+      void
+    >({
+      query: () => ({
+        url: "/api/fitments/rules",
+      }),
+
+      providesTags: [
+        "FitmentRule",
+      ],
+    }),
+
+    createRule: builder.mutation<
+      any,
+      any
+    >({
+      query: (data) => ({
+        url: "/api/fitments/rules",
+        method: "POST",
+        data,
+      }),
+
+      invalidatesTags: [
+        "FitmentRule",
+      ],
+    }),
+
+    updateRule: builder.mutation<
+      any,
+      {
+        id: string;
+        data: any;
+      }
+    >({
+      query: ({
+        id,
+        data,
+      }) => ({
+        url: `/api/fitments/rules/${id}`,
+        method: "PUT",
+        data,
+      }),
+
+      invalidatesTags: [
+        "FitmentRule",
+      ],
+    }),
+
+    deleteRule: builder.mutation<
+      void,
+      string
+    >({
+      query: (id) => ({
+        url: `/api/fitments/rules/${id}`,
+        method: "DELETE",
+      }),
+
+      invalidatesTags: [
+        "FitmentRule",
+      ],
+    }),
+    // PRODUCT FITMENTS
+    getProductFitments:
+      builder.query<
+        any[],
+        string
+      >({
+        query: (
+          productId
+        ) => ({
+          url: `/api/fitments/product/${productId}`,
+        }),
+
+        providesTags: (
+          _,
+          __,
+          productId
+        ) => [
+          {
+            type:
+              "ProductFitment",
+            id: productId,
+          },
+        ],
+      }),
+
+    createProductFitment:
       builder.mutation<
-        { message: string },
-        {
-          productId: string;
-          trimIds: string[];
-          notes?: string;
-          position?: string;
-          quantityRequired?: number;
-        }
+        any,
+        any
       >({
         query: (data) => ({
-          url: "/api/fitments/products/bulk-assign",
+          url: "/api/fitments",
           method: "POST",
           data,
         }),
 
         invalidatesTags: [
-          "Fitment",
-          "Products",
+          "ProductFitment",
         ],
       }),
 
-    // GET PRODUCTS BY FITMENT
-    getProductsByFitment: builder.query<
+    updateProductFitment:
+      builder.mutation<
+        any,
+        {
+          id: string;
+          data: any;
+        }
+      >({
+        query: ({
+          id,
+          data,
+        }) => ({
+          url: `/api/fitments/${id}`,
+          method: "PUT",
+          data,
+        }),
+
+        invalidatesTags: [
+          "ProductFitment",
+        ],
+      }),
+
+    deleteProductFitment:
+      builder.mutation<
+        void,
+        string
+      >({
+        query: (id) => ({
+          url: `/api/fitments/${id}`,
+          method: "DELETE",
+        }),
+
+        invalidatesTags: [
+          "ProductFitment",
+        ],
+      }),
+    // INDEX
+    getProductIndex:
+      builder.query<
+        any[],
+        string
+      >({
+        query: (
+          productId
+        ) => ({
+          url: `/api/fitments/product/${productId}/index`,
+        }),
+
+        providesTags: (
+          _,
+          __,
+          productId
+        ) => [
+          {
+            type:
+              "FitmentIndex",
+            id: productId,
+          },
+        ],
+      }),
+    // LOGS
+    getLogs: builder.query<
       any[],
-      {
-        makeId?: string;
-        modelId?: string;
-        generationId?: string;
-        engineId?: string;
-        trimId?: string;
-        year?: number;
-      }
+      string | undefined
     >({
-      query: (params) => ({
-        url: "/api/fitments/products",
-        method: "GET",
-        params,
+      query: (
+        productId
+      ) => ({
+        url:
+          "/api/fitments/logs",
+
+        params:
+          productId
+            ? {
+                productId,
+              }
+            : undefined,
       }),
 
-      providesTags: ["Products"],
-    }),
-
-    // GET VEHICLE TREE
-    getVehicleTree: builder.query<
-      VehicleMake[],
-      void
-    >({
-      query: () => ({
-        url: "/api/fitments/tree",
-        method: "GET",
-      }),
-
-      providesTags: ["VehicleTree"],
-    }),
-
-    // DELETE MUTATIONS
-    deleteMake: builder.mutation<
-      { message: string },
-      string
-    >({
-      query: (id) => ({
-        url: `/api/fitments/makes/${id}`,
-        method: "DELETE",
-      }),
-
-      invalidatesTags: ["VehicleTree"],
-    }),
-
-    deleteModel: builder.mutation<
-      { message: string },
-      string
-    >({
-      query: (id) => ({
-        url: `/api/fitments/models/${id}`,
-        method: "DELETE",
-      }),
-
-      invalidatesTags: ["VehicleTree"],
-    }),
-
-    deleteGeneration: builder.mutation<
-      { message: string },
-      string
-    >({
-      query: (id) => ({
-        url: `/api/fitments/generations/${id}`,
-        method: "DELETE",
-      }),
-
-      invalidatesTags: ["VehicleTree"],
-    }),
-
-    deleteEngine: builder.mutation<
-      { message: string },
-      string
-    >({
-      query: (id) => ({
-        url: `/api/fitments/engines/${id}`,
-        method: "DELETE",
-      }),
-
-      invalidatesTags: ["VehicleTree"],
-    }),
-
-    deleteTrim: builder.mutation<
-      { message: string },
-      string
-    >({
-      query: (id) => ({
-        url: `/api/fitments/trims/${id}`,
-        method: "DELETE",
-      }),
-
-      invalidatesTags: ["VehicleTree"],
-    }),
-
-    // UPDATE MUTATIONS
-    updateMake: builder.mutation<
-      VehicleMake,
-      {
-        id: string;
-        data: Partial<
-          Omit<VehicleMake, "id">
-        >;
-      }
-    >({
-      query: ({ id, data }) => ({
-        url: `/api/fitments/makes/${id}`,
-        method: "PUT",
-        data,
-      }),
-
-      invalidatesTags: ["VehicleTree"],
-    }),
-
-    updateModel: builder.mutation<
-      VehicleModel,
-      {
-        id: string;
-        data: Partial<
-          Omit<VehicleModel, "id">
-        >;
-      }
-    >({
-      query: ({ id, data }) => ({
-        url: `/api/fitments/models/${id}`,
-        method: "PUT",
-        data,
-      }),
-
-      invalidatesTags: ["VehicleTree"],
-    }),
-
-    updateGeneration: builder.mutation<
-      VehicleGeneration,
-      {
-        id: string;
-        data: Partial<
-          Omit<VehicleGeneration, "id">
-        >;
-      }
-    >({
-      query: ({ id, data }) => ({
-        url: `/api/fitments/generations/${id}`,
-        method: "PUT",
-        data,
-      }),
-
-      invalidatesTags: ["VehicleTree"],
-    }),
-
-    updateEngine: builder.mutation<
-      VehicleEngine,
-      {
-        id: string;
-        data: Partial<
-          Omit<VehicleEngine, "id">
-        >;
-      }
-    >({
-      query: ({ id, data }) => ({
-        url: `/api/fitments/engines/${id}`,
-        method: "PUT",
-        data,
-      }),
-
-      invalidatesTags: ["VehicleTree"],
-    }),
-
-    updateTrim: builder.mutation<
-      VehicleTrim,
-      {
-        id: string;
-        data: Partial<
-          Omit<VehicleTrim, "id">
-        >;
-      }
-    >({
-      query: ({ id, data }) => ({
-        url: `/api/fitments/trims/${id}`,
-        method: "PUT",
-        data,
-      }),
-
-      invalidatesTags: ["VehicleTree"],
+      providesTags: [
+        "FitmentLog",
+      ],
     }),
   }),
 });
 
-// EXPORT HOOKS
 export const {
-  useCreateMakeMutation,
-  useCreateModelMutation,
-  useCreateGenerationMutation,
-  useCreateEngineMutation,
-  useCreateTrimMutation,
-  useAssignProductFitmentMutation,
-  useBulkAssignProductFitmentMutation,
-  useGetProductsByFitmentQuery,
-  useGetVehicleTreeQuery,
-
-  useDeleteMakeMutation,
-  useDeleteModelMutation,
-  useDeleteGenerationMutation,
-  useDeleteEngineMutation,
-  useDeleteTrimMutation,
-
-  useUpdateMakeMutation,
-  useUpdateModelMutation,
-  useUpdateGenerationMutation,
-  useUpdateEngineMutation,
-  useUpdateTrimMutation,
+  // CONFIGS
+  useGetConfigsQuery,
+  useCreateConfigMutation,
+  useUpdateConfigMutation,
+  useDeleteConfigMutation,
+  // RULES
+  useGetRulesQuery,
+  useCreateRuleMutation,
+  useUpdateRuleMutation,
+  useDeleteRuleMutation,
+  // PRODUCT FITMENTS
+  useGetProductFitmentsQuery,
+  useCreateProductFitmentMutation,
+  useUpdateProductFitmentMutation,
+  useDeleteProductFitmentMutation,
+  // INDEX
+  useGetProductIndexQuery,
+  // LOGS
+  useGetLogsQuery,
 } = fitmentApi;

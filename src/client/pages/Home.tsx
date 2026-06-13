@@ -2,31 +2,55 @@ import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import ProductCard from "../components/ProductCard";
 import {
-  Search,
   ChevronRight,
   X,
   Check,
   ArrowUp,
   Calendar,
-  ChevronLeft,
 } from "lucide-react";
 import { useGetProductsQuery } from "../../services/productApi";
 import { useMeQuery } from "../../services/authApi";
 import {
-  useGetVehicleTreeQuery,
-  useGetProductsByFitmentQuery,
-} from "../../services/fitmentApi";
+  useGetMakesQuery,
+  useGetModelsQuery,
+  useGetGenerationsQuery,
+  useGetEnginesQuery,
+  useGetTrimsQuery,
+} from "../../services/vehicleApi";
 import { useGetCategoriesQuery } from "../../services/categoryApi";
 import { useGetBrandsQuery } from "../../services/brandApi";
-import type {
-  VehicleMake,
-  VehicleModel,
-  VehicleGeneration,
-  VehicleEngine,
-  VehicleTrim,
-} from "../../types/fitment.types";
 
-/* ---------- Toast Component (no rounded corners) ---------- */
+// ---------- Local types (since vehicleApi doesn't export them) ----------
+interface VehicleMake {
+  id: string;
+  name: string;
+  slug?: string;
+}
+
+interface VehicleModel {
+  id: string;
+  name: string;
+  slug?: string;
+}
+
+interface VehicleGeneration {
+  id: string;
+  name: string;
+  yearStart?: number;
+  yearEnd?: number;
+}
+
+interface VehicleEngine {
+  id: string;
+  engineCode: string;
+}
+
+interface VehicleTrim {
+  id: string;
+  name: string;
+}
+
+/* ---------- Toast Component ---------- */
 const Toast = ({ message, type, onClose }: { message: string; type: "success" | "error"; onClose: () => void }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 3000);
@@ -45,7 +69,7 @@ const Toast = ({ message, type, onClose }: { message: string; type: "success" | 
   );
 };
 
-/* ---------- BackToTop (green-600 retained) ---------- */
+/* ---------- BackToTop ---------- */
 const BackToTop = () => {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -64,7 +88,7 @@ const BackToTop = () => {
   );
 };
 
-/* ---------- HeroCarousel (no rounded, no arrow, will stretch to fill container) ---------- */
+/* ---------- HeroCarousel ---------- */
 const HeroCarousel = ({ products }: { products: any[] }) => {
   const navigate = useNavigate();
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -169,7 +193,7 @@ const HeroCarousel = ({ products }: { products: any[] }) => {
   );
 };
 
-/* ---------- Skeletons (no rounded corners) ---------- */
+/* ---------- Skeletons ---------- */
 const HeroCarouselSkeleton = () => (
   <div className="relative overflow-hidden shadow-2xl bg-gray-200 animate-pulse">
     <div className="w-full h-64 md:h-80 lg:h-96 bg-linear-to-r from-gray-200 to-gray-300" />
@@ -222,61 +246,8 @@ const VehicleFilterSidebarSkeleton = () => (
   </div>
 );
 
-const Pagination = ({ currentPage, totalPages, onPageChange }: { currentPage: number; totalPages: number; onPageChange: (page: number) => void }) => {
-  const getPageNumbers = () => {
-    const delta = 2;
-    const range = [];
-    for (let i = Math.max(2, currentPage - delta); i <= Math.min(totalPages - 1, currentPage + delta); i++) {
-      range.push(i);
-    }
-    if (currentPage - delta > 2) range.unshift("...");
-    if (currentPage + delta < totalPages - 1) range.push("...");
-    range.unshift(1);
-    if (totalPages !== 1) range.push(totalPages);
-    return range;
-  };
 
-  if (totalPages <= 1) return null;
-
-  return (
-    <div className="flex justify-center mt-8">
-      <nav className="flex items-center gap-1 flex-wrap justify-center">
-        <button
-          onClick={() => onPageChange(currentPage - 1)}
-          disabled={currentPage === 1}
-          className="px-3 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
-        >
-          <ChevronLeft size={18} />
-        </button>
-        {getPageNumbers().map((page, idx) => (
-          <button
-            key={idx}
-            onClick={() => typeof page === "number" && onPageChange(page)}
-            className={`min-w-10 h-10 px-3 font-medium transition ${
-              page === currentPage
-                ? "bg-emerald-800 text-white shadow-md"
-                : page === "..."
-                ? "cursor-default text-gray-400"
-                : "border border-gray-300 text-gray-700 hover:bg-gray-50"
-            }`}
-            disabled={page === "..."}
-          >
-            {page}
-          </button>
-        ))}
-        <button
-          onClick={() => onPageChange(currentPage + 1)}
-          disabled={currentPage === totalPages}
-          className="px-3 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
-        >
-          <ChevronRight size={18} />
-        </button>
-      </nav>
-    </div>
-  );
-};
-
-/* ---------- VehicleFilterSidebar (wider, no rounded, with SEARCH button and temp state) ---------- */
+/* ---------- VehicleFilterSidebar (UI only – no backend search) ---------- */
 interface VehicleFilterSidebarProps {
   tempMake: VehicleMake | null;
   tempModel: VehicleModel | null;
@@ -292,8 +263,6 @@ interface VehicleFilterSidebarProps {
   onTempYearChange: (year: string) => void;
   onSearch: () => void;
   onClearFilters: () => void;
-  vehicleTree?: VehicleMake[];
-  isLoadingTree: boolean;
 }
 
 const VehicleFilterSidebar = ({
@@ -311,12 +280,17 @@ const VehicleFilterSidebar = ({
   onTempYearChange,
   onSearch,
   onClearFilters,
-  vehicleTree,
-  isLoadingTree,
 }: VehicleFilterSidebarProps) => {
+  const { data: makes = [], isLoading: makesLoading } = useGetMakesQuery();
+  const { data: models = [], isLoading: modelsLoading } = useGetModelsQuery(tempMake?.id || "", { skip: !tempMake });
+  const { data: generations = [], isLoading: generationsLoading } = useGetGenerationsQuery(tempModel?.id || "", { skip: !tempModel });
+  const { data: engines = [], isLoading: enginesLoading } = useGetEnginesQuery(tempGeneration?.id || "", { skip: !tempGeneration });
+  const { data: trims = [], isLoading: trimsLoading } = useGetTrimsQuery(tempEngine?.id || "", { skip: !tempEngine });
+
   const hasActiveFilters = tempMake || tempModel || tempGeneration || tempEngine || tempTrim || tempYear;
 
-  const handleMakeChange = (make: VehicleMake | null) => {
+  const handleMakeChange = (makeId: string) => {
+    const make = makes.find((m: any) => m.id === makeId) || null;
     onTempMakeChange(make);
     onTempModelChange(null);
     onTempGenerationChange(null);
@@ -324,22 +298,30 @@ const VehicleFilterSidebar = ({
     onTempTrimChange(null);
   };
 
-  const handleModelChange = (model: VehicleModel | null) => {
+  const handleModelChange = (modelId: string) => {
+    const model = models.find((m: any) => m.id === modelId) || null;
     onTempModelChange(model);
     onTempGenerationChange(null);
     onTempEngineChange(null);
     onTempTrimChange(null);
   };
 
-  const handleGenerationChange = (gen: VehicleGeneration | null) => {
+  const handleGenerationChange = (genId: string) => {
+    const gen = generations.find((g: any) => g.id === genId) || null;
     onTempGenerationChange(gen);
     onTempEngineChange(null);
     onTempTrimChange(null);
   };
 
-  const handleEngineChange = (engine: VehicleEngine | null) => {
+  const handleEngineChange = (engineId: string) => {
+    const engine = engines.find((e: any) => e.id === engineId) || null;
     onTempEngineChange(engine);
     onTempTrimChange(null);
+  };
+
+  const handleTrimChange = (trimId: string) => {
+    const trim = trims.find((t: any) => t.id === trimId) || null;
+    onTempTrimChange(trim);
   };
 
   return (
@@ -350,161 +332,137 @@ const VehicleFilterSidebar = ({
         </h3>
       </div>
       <div className="p-5 space-y-5">
-        {isLoadingTree ? (
-          <div className="space-y-3">
-            <div className="h-10 bg-gray-100 animate-pulse" />
-            <div className="h-10 bg-gray-100 animate-pulse" />
-            <div className="h-10 bg-gray-100 animate-pulse" />
+        <div className="space-y-1">
+          <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Make</label>
+          <select
+            value={tempMake?.id || ""}
+            onChange={(e) => handleMakeChange(e.target.value)}
+            className="w-full border border-gray-300 bg-white p-2.5 text-sm focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition"
+            disabled={makesLoading}
+          >
+            <option value="">All Makes</option>
+            {makes.map((make: any) => (
+              <option key={make.id} value={make.id}>{make.name}</option>
+            ))}
+          </select>
+        </div>
+
+        {tempMake && (
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Model</label>
+            <select
+              value={tempModel?.id || ""}
+              onChange={(e) => handleModelChange(e.target.value)}
+              className="w-full border border-gray-300 bg-white p-2.5 text-sm focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition"
+              disabled={modelsLoading}
+            >
+              <option value="">All Models</option>
+              {models.map((model: any) => (
+                <option key={model.id} value={model.id}>{model.name}</option>
+              ))}
+            </select>
           </div>
-        ) : (
-          <>
-            <div className="space-y-1">
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Make</label>
-              <select
-                value={tempMake?.id || ""}
-                onChange={(e) => {
-                  const make = vehicleTree?.find(m => m.id === e.target.value) || null;
-                  handleMakeChange(make);
-                }}
-                className="w-full border border-gray-300 bg-white p-2.5 text-sm focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition"
-              >
-                <option value="">All Makes</option>
-                {vehicleTree?.map(make => (
-                  <option key={make.id} value={make.id}>{make.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {tempMake && (
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Model</label>
-                <select
-                  value={tempModel?.id || ""}
-                  onChange={(e) => {
-                    const model = tempMake.models?.find(m => m.id === e.target.value) || null;
-                    handleModelChange(model);
-                  }}
-                  className="w-full border border-gray-300 bg-white p-2.5 text-sm focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition"
-                >
-                  <option value="">All Models</option>
-                  {tempMake.models?.map(model => (
-                    <option key={model.id} value={model.id}>{model.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {tempModel && (
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Generation</label>
-                <select
-                  value={tempGeneration?.id || ""}
-                  onChange={(e) => {
-                    const gen = tempModel.generations?.find(g => g.id === e.target.value) || null;
-                    handleGenerationChange(gen);
-                  }}
-                  className="w-full border border-gray-300 bg-white p-2.5 text-sm focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition"
-                >
-                  <option value="">All Generations</option>
-                  {tempModel.generations?.map(gen => (
-                    <option key={gen.id} value={gen.id}>
-                      {gen.name} ({gen.yearStart}{gen.yearEnd ? `-${gen.yearEnd}` : ""})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {tempGeneration && (
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Engine</label>
-                <select
-                  value={tempEngine?.id || ""}
-                  onChange={(e) => {
-                    const engine = tempGeneration.engines?.find(eng => eng.id === e.target.value) || null;
-                    handleEngineChange(engine);
-                  }}
-                  className="w-full border border-gray-300 bg-white p-2.5 text-sm focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition"
-                >
-                  <option value="">All Engines</option>
-                  {tempGeneration.engines?.map(eng => (
-                    <option key={eng.id} value={eng.id}>
-                      {eng.engineCode} {eng.engineName ? `- ${eng.engineName}` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {tempEngine && (
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Trim</label>
-                <select
-                  value={tempTrim?.id || ""}
-                  onChange={(e) => {
-                    const trim = tempEngine.trims?.find(t => t.id === e.target.value) || null;
-                    onTempTrimChange(trim);
-                  }}
-                  className="w-full border border-gray-300 bg-white p-2.5 text-sm focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition"
-                >
-                  <option value="">All Trims</option>
-                  {tempEngine.trims?.map(trim => (
-                    <option key={trim.id} value={trim.id}>{trim.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1">
-                <Calendar size={12} /> Year
-              </label>
-              <input
-                type="number"
-                placeholder="e.g., 2020"
-                value={tempYear}
-                onChange={(e) => onTempYearChange(e.target.value)}
-                className="w-full border border-gray-300 bg-white p-2.5 text-sm focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition"
-              />
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={onSearch}
-                className="flex-1 bg-emerald-800 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-900 transition-colors flex items-center justify-center gap-2 shadow-sm tracking-wide"
-              >
-                Search
-              </button>
-              {hasActiveFilters && (
-                <button
-                  onClick={onClearFilters}
-                  className="bg-gray-100 px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          </>
         )}
+
+        {tempModel && (
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Generation</label>
+            <select
+              value={tempGeneration?.id || ""}
+              onChange={(e) => handleGenerationChange(e.target.value)}
+              className="w-full border border-gray-300 bg-white p-2.5 text-sm focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition"
+              disabled={generationsLoading}
+            >
+              <option value="">All Generations</option>
+              {generations.map((gen: any) => (
+                <option key={gen.id} value={gen.id}>
+                  {gen.name} ({gen.yearStart}{gen.yearEnd ? `-${gen.yearEnd}` : ""})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {tempGeneration && (
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Engine</label>
+            <select
+              value={tempEngine?.id || ""}
+              onChange={(e) => handleEngineChange(e.target.value)}
+              className="w-full border border-gray-300 bg-white p-2.5 text-sm focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition"
+              disabled={enginesLoading}
+            >
+              <option value="">All Engines</option>
+              {engines.map((eng: any) => (
+                <option key={eng.id} value={eng.id}>
+                  {eng.engineCode}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {tempEngine && (
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide">Trim</label>
+            <select
+              value={tempTrim?.id || ""}
+              onChange={(e) => handleTrimChange(e.target.value)}
+              className="w-full border border-gray-300 bg-white p-2.5 text-sm focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition"
+              disabled={trimsLoading}
+            >
+              <option value="">All Trims</option>
+              {trims.map((trim: any) => (
+                <option key={trim.id} value={trim.id}>{trim.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1">
+            <Calendar size={12} /> Year
+          </label>
+          <input
+            type="number"
+            placeholder="e.g., 2020"
+            value={tempYear}
+            onChange={(e) => onTempYearChange(e.target.value)}
+            className="w-full border border-gray-300 bg-white p-2.5 text-sm focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition"
+          />
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <button
+            onClick={onSearch}
+            className="flex-1 bg-emerald-800 px-3 py-2.5 text-sm font-semibold text-white hover:bg-emerald-900 transition-colors flex items-center justify-center gap-2 shadow-sm tracking-wide"
+          >
+            Search
+          </button>
+          {hasActiveFilters && (
+            <button
+              onClick={onClearFilters}
+              className="bg-gray-100 px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-/* ---------- SectionHeader (emerald-800) ---------- */
-const SectionHeader = ({
-  title,
-}: {
-  title: string;
-}) => (
+/* ---------- SectionHeader ---------- */
+const SectionHeader = ({ title }: { title: string }) => (
   <div className="flex justify-center items-center mb-5">
-    <h2 className="text-xl md:text-2xl font-bold text-emerald-800 tracking-tight text-center">
+    <h2 className="text-xl md:text-2xl font-bold text-gray-800 tracking-tight text-center">
       {title}
     </h2>
   </div>
 );
 
-/* ---------- Helper functions for curated sections (unchanged) ---------- */
+/* ---------- Helper functions for curated sections ---------- */
 const getProductPrice = (product: any): number => {
   return product.variants?.[0]?.price ?? 0;
 };
@@ -588,19 +546,10 @@ const getCheapestPerCategory = (products: any[], maxItems = 8): any[] => {
 /* ========== MAIN HOME COMPONENT ========== */
 export default function Home() {
   const { isLoading: userLoading } = useMeQuery();
+  const [section1Limit, setSection1Limit] = useState(8);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const [fitmentPage, setFitmentPage] = useState(1);
-  const fitmentPageSize = 12;
-
-  // Actual filter states that trigger API calls
-  const [selectedMake, setSelectedMake] = useState<VehicleMake | null>(null);
-  const [selectedModel, setSelectedModel] = useState<VehicleModel | null>(null);
-  const [selectedGeneration, setSelectedGeneration] = useState<VehicleGeneration | null>(null);
-  const [selectedEngine, setSelectedEngine] = useState<VehicleEngine | null>(null);
-  const [selectedTrim, setSelectedTrim] = useState<VehicleTrim | null>(null);
-  const [year, setYear] = useState("");
-
-  // Temporary filter states for the sidebar (user selection before search)
+  // Vehicle filter state (UI only – no backend search yet)
   const [tempMake, setTempMake] = useState<VehicleMake | null>(null);
   const [tempModel, setTempModel] = useState<VehicleModel | null>(null);
   const [tempGeneration, setTempGeneration] = useState<VehicleGeneration | null>(null);
@@ -608,119 +557,29 @@ export default function Home() {
   const [tempTrim, setTempTrim] = useState<VehicleTrim | null>(null);
   const [tempYear, setTempYear] = useState("");
 
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
-  const [section1Limit, setSection1Limit] = useState(8);
-
-  const fitmentParams = useMemo(() => ({
-    makeId: selectedMake?.id,
-    modelId: selectedModel?.id,
-    generationId: selectedGeneration?.id,
-    engineId: selectedEngine?.id,
-    trimId: selectedTrim?.id,
-    year: year ? parseInt(year, 10) : undefined,
-  }), [selectedMake, selectedModel, selectedGeneration, selectedEngine, selectedTrim, year]);
-
-  const hasFitmentFilters = !!fitmentParams.makeId || !!fitmentParams.modelId || !!fitmentParams.generationId || !!fitmentParams.engineId || !!fitmentParams.trimId || !!fitmentParams.year;
-
-  const {
-    data: allProducts = [],
-    isLoading: productsLoading,
-    error: productsError,
-  } = useGetProductsQuery(undefined, {
-    skip: hasFitmentFilters,
-  });
-
-  const {
-    data: allFitmentProducts = [],
-    isFetching: fetchingFitmentProducts,
-    error: fitmentError,
-  } = useGetProductsByFitmentQuery(fitmentParams, {
-    skip: !hasFitmentFilters,
-  });
-
+  const { data: allProducts = [], isLoading: productsLoading, error: productsError } = useGetProductsQuery();
   const { data: categories = [], isLoading: categoriesLoading } = useGetCategoriesQuery();
   const { data: brands = [], isLoading: brandsLoading } = useGetBrandsQuery();
-  const { data: vehicleTree, isLoading: treeLoading } = useGetVehicleTreeQuery();
 
   const section1Products = useMemo(() => {
-    if (hasFitmentFilters || productsLoading || !allProducts.length) return [];
+    if (productsLoading || !allProducts.length) return [];
     return getRandomDiverseProducts(allProducts, section1Limit);
-  }, [allProducts, hasFitmentFilters, productsLoading, section1Limit]);
+  }, [allProducts, productsLoading, section1Limit]);
 
   const section2Products = useMemo(() => {
-    if (hasFitmentFilters || productsLoading || categoriesLoading || !allProducts.length || !categories.length) return [];
+    if (productsLoading || categoriesLoading || !allProducts.length || !categories.length) return [];
     return getOnePerCategory(allProducts, categories, 8);
-  }, [allProducts, categories, hasFitmentFilters, productsLoading, categoriesLoading]);
+  }, [allProducts, categories, productsLoading, categoriesLoading]);
 
   const section4Products = useMemo(() => {
-    if (hasFitmentFilters || productsLoading || !allProducts.length) return [];
+    if (productsLoading || !allProducts.length) return [];
     return getCheapestPerCategory(allProducts, 8);
-  }, [allProducts, hasFitmentFilters, productsLoading]);
+  }, [allProducts, productsLoading]);
 
-  const fitmentTotalProducts = allFitmentProducts.length;
-  const fitmentTotalPages = Math.ceil(fitmentTotalProducts / fitmentPageSize);
-  const fitmentDisplayedProducts = useMemo(() => {
-    const start = (fitmentPage - 1) * fitmentPageSize;
-    const end = start + fitmentPageSize;
-    return allFitmentProducts.slice(start, end);
-  }, [allFitmentProducts, fitmentPage, fitmentPageSize]);
-
-  // Sync temp filters when actual filters change (e.g., after search or clear)
-  useEffect(() => {
-    if (!hasFitmentFilters) {
-      // If no active filters, clear temp filters as well (initial state or after clear)
-      setTempMake(null);
-      setTempModel(null);
-      setTempGeneration(null);
-      setTempEngine(null);
-      setTempTrim(null);
-      setTempYear("");
-    } else {
-      setTempMake(selectedMake);
-      setTempModel(selectedModel);
-      setTempGeneration(selectedGeneration);
-      setTempEngine(selectedEngine);
-      setTempTrim(selectedTrim);
-      setTempYear(year);
-    }
-  }, [hasFitmentFilters, selectedMake, selectedModel, selectedGeneration, selectedEngine, selectedTrim, year]);
-
-  useEffect(() => {
-    setFitmentPage(1);
-  }, [selectedMake, selectedModel, selectedGeneration, selectedEngine, selectedTrim, year]);
-
-  const handleSearch = () => {
-    setSelectedMake(tempMake);
-    setSelectedModel(tempModel);
-    setSelectedGeneration(tempGeneration);
-    setSelectedEngine(tempEngine);
-    setSelectedTrim(tempTrim);
-    setYear(tempYear);
-    setFitmentPage(1);
-  };
-
-  const clearFitmentFilters = () => {
-    setSelectedMake(null);
-    setSelectedModel(null);
-    setSelectedGeneration(null);
-    setSelectedEngine(null);
-    setSelectedTrim(null);
-    setYear("");
-    setTempMake(null);
-    setTempModel(null);
-    setTempGeneration(null);
-    setTempEngine(null);
-    setTempTrim(null);
-    setTempYear("");
-    setFitmentPage(1);
-  };
-
-  const isLoading = (productsLoading || treeLoading || userLoading) && !hasFitmentFilters && allProducts.length === 0;
-  const isFitmentLoading = fetchingFitmentProducts && hasFitmentFilters;
+  const isLoading = (productsLoading || userLoading) && allProducts.length === 0;
 
   const errorMessage = (() => {
-    if (fitmentError && hasFitmentFilters) return "Failed to load products for this vehicle.";
-    if (productsError && !hasFitmentFilters && !productsLoading) {
+    if (productsError && !productsLoading) {
       if (typeof productsError === "string") return productsError;
       if ("message" in productsError) return productsError.message;
       if ("data" in productsError && productsError.data && typeof productsError.data === "object" && "message" in productsError.data)
@@ -730,7 +589,20 @@ export default function Home() {
     return null;
   })();
 
-  if ((productsError && !hasFitmentFilters && !productsLoading) || (fitmentError && hasFitmentFilters)) {
+  const handleSearch = () => {
+    setToast({ message: "Vehicle‑based product search is coming soon!", type: "error" });
+  };
+
+  const clearFitmentFilters = () => {
+    setTempMake(null);
+    setTempModel(null);
+    setTempGeneration(null);
+    setTempEngine(null);
+    setTempTrim(null);
+    setTempYear("");
+  };
+
+  if (productsError && !productsLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white shadow-lg p-6 max-w-md w-full text-center">
@@ -747,14 +619,9 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 py-6 md:py-8">
-          {/* Sidebar wider, carousel fills remaining space */}
           <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6 mb-8">
-            <div>
-              <VehicleFilterSidebarSkeleton />
-            </div>
-            <div>
-              <HeroCarouselSkeleton />
-            </div>
+            <div><VehicleFilterSidebarSkeleton /></div>
+            <div><HeroCarouselSkeleton /></div>
           </div>
           <div className="space-y-6">
             <div className="h-10 bg-gray-200 w-48 animate-pulse" />
@@ -769,7 +636,7 @@ export default function Home() {
     <div className="min-h-screen bg-gray-50">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <div className="max-w-7xl mx-auto px-4 py-6 md:py-8">
-        {/* Top Row: Sidebar (fixed 400px) + Carousel (takes remaining space, no centering) */}
+        {/* Top Row: Sidebar + Carousel */}
         <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-6 mb-8">
           <div className="w-full">
             <VehicleFilterSidebar
@@ -787,8 +654,6 @@ export default function Home() {
               onTempYearChange={setTempYear}
               onSearch={handleSearch}
               onClearFilters={clearFitmentFilters}
-              vehicleTree={vehicleTree}
-              isLoadingTree={treeLoading}
             />
           </div>
           <div className="w-full">
@@ -796,149 +661,107 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Product sections below - full width */}
+        {/* Product sections (no fitment search active) */}
         <div className="w-full space-y-10">
-          {hasFitmentFilters && (
-            <section>
-              <div className="bg-white shadow-sm p-4 flex items-center justify-between flex-wrap gap-2">
-                <span className="text-sm text-gray-600">
-                  Showing {fitmentDisplayedProducts.length} of {fitmentTotalProducts} products for your vehicle
-                </span>
-                <button onClick={clearFitmentFilters} className="text-sm text-emerald-800 hover:text-emerald-900 font-medium flex items-center gap-1 px-3 py-1.5 hover:bg-emerald-50 transition">
-                  <X size={14} /> Clear all filters
-                </button>
+          <section>
+            <SectionHeader title="MOgrace Auto Store: Buy car parts online" />
+            {productsLoading ? (
+              <ProductGridSkeleton />
+            ) : section1Products.length === 0 ? (
+              <div className="bg-white shadow-sm p-8 text-center text-gray-500">No products available.</div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+                  {section1Products.map((product: any) => (
+                    <div key={product.id} className="transform transition-all duration-300 hover:-translate-y-1">
+                      <ProductCard product={product} />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-center gap-4 mt-6">
+                  {section1Limit < allProducts.length && (
+                    <button
+                      onClick={() => setSection1Limit(prev => prev + 8)}
+                      className="px-5 py-2 bg-emerald-800 text-white hover:bg-emerald-900 transition"
+                    >
+                      Show More
+                    </button>
+                  )}
+                  {section1Limit > 8 && (
+                    <button
+                      onClick={() => setSection1Limit(8)}
+                      className="px-5 py-2 bg-gray-200 text-gray-800 hover:bg-gray-300 transition"
+                    >
+                      Show Less
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+
+          <section>
+            <SectionHeader title="All Your Car Essentials in One Place" />
+            {productsLoading || categoriesLoading ? (
+              <ProductGridSkeleton />
+            ) : section2Products.length === 0 ? (
+              <div className="bg-white shadow-sm p-8 text-center text-gray-500">No products found.</div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+                {section2Products.map((product: any) => (
+                  <div key={product.id} className="transform transition-all duration-300 hover:-translate-y-1">
+                    <ProductCard product={product} />
+                  </div>
+                ))}
               </div>
-              {isFitmentLoading ? (
-                <ProductGridSkeleton />
-              ) : fitmentDisplayedProducts.length === 0 ? (
-                <div className="bg-white shadow-sm p-12 text-center">
-                  <div className="w-20 h-20 bg-gray-100 flex items-center justify-center mx-auto mb-4">
-                    <Search size={32} className="text-gray-400" />
-                  </div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-1">No products found</h3>
-                  <p className="text-gray-500">No products match your vehicle selection. Try a different vehicle or clear filters.</p>
-                  <button onClick={clearFitmentFilters} className="mt-4 text-emerald-800 hover:text-emerald-900 font-medium">Clear vehicle filters</button>
-                </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-                    {fitmentDisplayedProducts.map((product: any) => (
-                      <div key={product.id} className="transform transition-all duration-300 hover:-translate-y-1">
-                        <ProductCard product={product} />
-                      </div>
-                    ))}
-                  </div>
-                  <Pagination currentPage={fitmentPage} totalPages={fitmentTotalPages} onPageChange={setFitmentPage} />
-                </>
-              )}
-            </section>
-          )}
+            )}
+          </section>
 
-          {!hasFitmentFilters && (
-            <>
-              <section>
-                <SectionHeader title="MOgrace Auto Store: Buy car parts online" />
-                {productsLoading ? (
-                  <ProductGridSkeleton />
-                ) : section1Products.length === 0 ? (
-                  <div className="bg-white shadow-sm p-8 text-center text-gray-500">No products available.</div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-                      {section1Products.map((product: any) => (
-                        <div key={product.id} className="transform transition-all duration-300 hover:-translate-y-1">
-                          <ProductCard product={product} />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex justify-center gap-4 mt-6">
-                      {section1Limit < allProducts.length && (
-                        <button
-                          onClick={() => setSection1Limit(prev => prev + 8)}
-                          className="px-5 py-2 bg-emerald-800 text-white hover:bg-emerald-900 transition"
-                        >
-                          Show More
-                        </button>
-                      )}
-                      {section1Limit > 8 && (
-                        <button
-                          onClick={() => setSection1Limit(8)}
-                          className="px-5 py-2 bg-gray-200 text-gray-800 hover:bg-gray-300 transition"
-                        >
-                          Show Less
-                        </button>
-                      )}
-                    </div>
-                  </>
-                )}
-              </section>
+          <section>
+            <div className="flex justify-center items-center mb-5">
+              <h2 className="text-xl md:text-2xl font-bold uppercase tracking-wide text-gray-800 text-center">
+                Find Affordable Auto Parts for Leading Car Brands
+              </h2>
+            </div>
+            {brandsLoading ? (
+              <div className="flex flex-wrap gap-3">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="h-10 w-24 bg-gray-200 animate-pulse" />
+                ))}
+              </div>
+            ) : brands.length === 0 ? (
+              <div className="bg-white shadow-sm p-8 text-center text-gray-500">No brands available.</div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {brands.map((brand) => (
+                  <button
+                    key={brand.id}
+                    onClick={() => window.location.href = `/brand/${brand.id}`}
+                    className="px-4 py-2 bg-white border border-gray-200 text-gray-800 text-sm font-bold uppercase tracking-wide hover:border-emerald-500 hover:text-emerald-800 transition shadow-sm w-full text-center"
+                  >
+                    {brand.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
 
-              <section>
-                <SectionHeader title="All Your Car Essentials in One Place" />
-                {productsLoading || categoriesLoading ? (
-                  <ProductGridSkeleton />
-                ) : section2Products.length === 0 ? (
-                  <div className="bg-white shadow-sm p-8 text-center text-gray-500">No products found.</div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-                    {section2Products.map((product: any) => (
-                      <div key={product.id} className="transform transition-all duration-300 hover:-translate-y-1">
-                        <ProductCard product={product} />
-                      </div>
-                    ))}
+          <section>
+            <SectionHeader title="MOgrace Auto Bestsellers: Buy genuine car parts online at unbeatable prices"/>
+            {productsLoading ? (
+              <ProductGridSkeleton />
+            ) : section4Products.length === 0 ? (
+              <div className="bg-white shadow-sm p-8 text-center text-gray-500">No products found.</div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+                {section4Products.map((product: any) => (
+                  <div key={product.id} className="transform transition-all duration-300 hover:-translate-y-1">
+                    <ProductCard product={product} />
                   </div>
-                )}
-              </section>
-
-              <section>
-                {/* Section header with uppercase bold text as requested */}
-                <div className="flex justify-center items-center mb-5">
-                  <h2 className="text-xl md:text-2xl font-bold uppercase tracking-wide text-emerald-800 text-center">
-                    Find Affordable Auto Parts for Leading Car Brands
-                  </h2>
-                </div>
-                {brandsLoading ? (
-                  <div className="flex flex-wrap gap-3">
-                    {Array.from({ length: 8 }).map((_, i) => (
-                      <div key={i} className="h-10 w-24 bg-gray-200 animate-pulse" />
-                    ))}
-                  </div>
-                ) : brands.length === 0 ? (
-                  <div className="bg-white shadow-sm p-8 text-center text-gray-500">No brands available.</div>
-                ) : (
-                  /* Modified: 5 buttons per row, even horizontal spacing, uppercase bold */
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                    {brands.map((brand) => (
-                      <button
-                        key={brand.id}
-                        onClick={() => window.location.href = `/brand/${brand.id}`}
-                        className="px-4 py-2 bg-white border border-gray-200 text-gray-800 text-sm font-bold uppercase tracking-wide hover:border-emerald-500 hover:text-emerald-800 transition shadow-sm w-full text-center"
-                      >
-                        {brand.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              <section>
-                <SectionHeader title="MOgrace Auto Bestsellers: Buy genuine car parts online at unbeatable prices"/>
-                {productsLoading ? (
-                  <ProductGridSkeleton />
-                ) : section4Products.length === 0 ? (
-                  <div className="bg-white shadow-sm p-8 text-center text-gray-500">No products found.</div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
-                    {section4Products.map((product: any) => (
-                      <div key={product.id} className="transform transition-all duration-300 hover:-translate-y-1">
-                        <ProductCard product={product} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-            </>
-          )}
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       </div>
       <BackToTop />

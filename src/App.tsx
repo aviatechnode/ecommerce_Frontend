@@ -20,7 +20,7 @@ import AdminRoles from "./admin/components/AdminRoles";
 import AdminWarehouses from "./admin/components/AdminWarehouses";
 import AdminCoupons from "./admin/components/AdminCoupons";
 import AdminAuditLogs from "./admin/components/AdminAuditLogs";
-import AdminFitments from "./admin/components/AdminFitment";
+import AminProductFitmentManager from "./admin/components/AdminFitment"
 import AdminCouriers from "./admin/components/AdminCouriers";
 import AdminPickupStations from "./admin/components/AdminPickupStations";
 import AdminShipments from "./admin/components/AdminShipments";
@@ -108,7 +108,7 @@ function App() {
           <Route path="products" element={<AdminProducts />} />
           <Route path="categories" element={<AdminCategories />} />
           <Route path="brands" element={<AdminBrands />} />
-          <Route path="fitments" element={<AdminFitments />} />
+          <Route path="fitments" element={<AminProductFitmentManager />} />
           <Route path="orders" element={<AdminOrders />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="roles" element={<AdminRoles />} />
