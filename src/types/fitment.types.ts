@@ -1,126 +1,205 @@
+export type FitmentType =
+  | "UNIVERSAL"
+  | "EXACT"
+  | "RANGE"
+  | "ENGINE_SPECIFIC"
+  | "TRIM_SPECIFIC"
+  | "OEM_MATCH"
+  | "CROSS_REFERENCE"
+  | "GENERATION_ONLY";
+
 export type FitmentLevel =
+  | "GLOBAL"
   | "MAKE"
   | "MODEL"
   | "GENERATION"
   | "ENGINE"
-  | "TRIM";
+  | "TRIM"
+  | "EXACT_MATCH";
 
-export interface ProductFitment {
+// CONFIG
+export type FitmentServiceConfig = {
   id: string;
+  name: string;
+  description?: string;
+  isActive?: boolean;
+  allowUniversalFallback?: boolean;
+  allowCrossGenerationMatch?: boolean;
+  allowEngineFallback?: boolean;
+  weightMake?: number;
+  weightModel?: number;
+  weightGeneration?: number;
+  weightEngine?: number;
+  weightTrim?: number;
+  weightYear?: number;
+  enableFitmentIndexing?: boolean;
+  enableTextSearchFallback?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
-  productId: string;
+export type CreateFitmentServiceConfigDto = Omit<
+  FitmentServiceConfig,
+  "id" | "createdAt" | "updatedAt"
+>;
+export type UpdateFitmentServiceConfigDto = Partial<CreateFitmentServiceConfigDto>;
 
+// FITMENT TYPE RULES
+export type FitmentTypeRule = {
+  id: string;
+  type: FitmentType;
   level: FitmentLevel;
+  priority?: number;
+  requiresMake?: boolean;
+  requiresModel?: boolean;
+  requiresGeneration?: boolean;
+  requiresEngine?: boolean;
+  requiresTrim?: boolean;
+  requiresYear?: boolean;
+  allowYearRange?: boolean;
+  strictMatching?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
-  makeId?: string | null;
+export type CreateFitmentTypeRuleDto = Omit<
+  FitmentTypeRule,
+  "id" | "createdAt" | "updatedAt"
+>;
+export type UpdateFitmentTypeRuleDto = Partial<CreateFitmentTypeRuleDto>;
 
-  modelId?: string | null;
 
-  generationId?: string | null;
-
-  engineId?: string | null;
-
-  trimId?: string | null;
-
-  yearStart?: number | null;
-
-  yearEnd?: number | null;
-
-  notes?: string | null;
-
-  position?: string | null;
-
-  quantityRequired?: number | null;
-
-  isUniversal: boolean;
-}
-
-export interface VehicleMake {
+// OEM REFERENCES
+export type OEMReference = {
   id: string;
+  manufacturer: string;
+  partNumber: string;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
-  name: string;
+export type CreateOEMReferenceDto = Omit<
+  OEMReference,
+  "id" | "createdAt" | "updatedAt"
+>;
+export type UpdateOEMReferenceDto = Partial<CreateOEMReferenceDto>;
 
-  slug: string;
-
-  isActive: boolean;
-
-  models?: VehicleModel[];
-}
-
-export interface VehicleModel {
+// CROSS REFERENCES
+export type CrossReference = {
   id: string;
+  brand: string;
+  partNumber: string;
+  description?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
-  makeId: string;
+export type CreateCrossReferenceDto = Omit<
+  CrossReference,
+  "id" | "createdAt" | "updatedAt"
+>;
+export type UpdateCrossReferenceDto = Partial<CreateCrossReferenceDto>;
 
-  name: string;
-
-  slug: string;
-
-  isActive: boolean;
-
-  generations?: VehicleGeneration[];
-}
-
-export interface VehicleGeneration {
+// PRODUCT FITMENTS
+export type ProductFitment = {
   id: string;
+  productId: string;
+  level: FitmentLevel;
+  type: FitmentType;
+  makeId?: string;
+  modelId?: string;
+  generationId?: string;
+  engineId?: string;
+  trimId?: string;
+  yearStart?: number;
+  yearEnd?: number;
+  notes?: string;
+  position?: string;
+  quantityRequired?: number;
+  isUniversal?: boolean;
+  isVerified?: boolean;
+  confidenceScore?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  // Relations (if needed)
+  oemReferences?: { oemReference: OEMReference }[];
+  crossReferences?: { crossReference: CrossReference }[];
+  make?: { id: string; name: string };
+  model?: { id: string; name: string };
+  generation?: { id: string; name: string };
+  engine?: { id: string; engineCode: string };
+  trim?: { id: string; name: string };
+  product?: { id: string; name: string };
+};
 
-  modelId: string;
+export type CreateProductFitmentDto = Omit<
+  ProductFitment,
+  | "id"
+  | "createdAt"
+  | "updatedAt"
+  | "oemReferences"
+  | "crossReferences"
+  | "make"
+  | "model"
+  | "generation"
+  | "engine"
+  | "trim"
+  | "product"
+> & {
+  oemReferenceIds?: string[];
+  crossReferenceIds?: string[];
+};
 
-  name: string;
+export type UpdateProductFitmentDto = Partial<CreateProductFitmentDto>;
 
-  slug: string;
 
-  chassisCode?: string | null;
+// RESOLUTION
+export type FitmentResolutionQuery = {
+  productId: string;
+  makeId?: string;
+  modelId?: string;
+  generationId?: string;
+  engineId?: string;
+  trimId?: string;
+  year?: number;
+  oemNumbers?: string[];
+};
 
-  yearStart: number;
+export type FitmentResolutionResult = {
+  matches: Array<{
+    productId: string;
+    score: number;
+    level: FitmentLevel;
+    type: FitmentType;
+    product?: { id: string; name: string }; 
+  }>;
+};
 
-  yearEnd?: number | null;
-
-  isActive: boolean;
-
-  engines?: VehicleEngine[];
-}
-
-export interface VehicleEngine {
+// LOGS
+export type FitmentResolutionLog = {
   id: string;
+  productId: string;
+  inputMake?: string;
+  inputModel?: string;
+  inputGeneration?: string;
+  inputEngine?: string;
+  inputTrim?: string;
+  inputYear?: number;
+  matched: boolean;
+  matchedLevel?: FitmentLevel;
+  matchedType?: FitmentType;
+  score?: number;
+  resolutionPath?: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
-  generationId: string;
-
-  engineCode: string;
-
-  engineName?: string | null;
-
-  fuelType?: string | null;
-
-  aspiration?: string | null;
-
-  cylinders?: number | null;
-
-  horsepower?: number | null;
-
-  displacementCc?: number | null;
-
-  displacementLabel?: string | null;
-
-  drivetrain?: string | null;
-
-  transmissionType?: string | null;
-
-  isActive: boolean;
-
-  trims?: VehicleTrim[];
-}
-
-export interface VehicleTrim {
-  id: string;
-
-  engineId: string;
-
-  name: string;
-
-  bodyType?: string | null;
-
-  doors?: number | null;
-
-  isActive: boolean;
-}
+// PAGINATED RESPONSE
+export type PaginatedResponse<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+};

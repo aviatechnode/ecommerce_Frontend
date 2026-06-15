@@ -19,38 +19,15 @@ import {
 } from "../../services/vehicleApi";
 import { useGetCategoriesQuery } from "../../services/categoryApi";
 import { useGetBrandsQuery } from "../../services/brandApi";
+import type {
+  VehicleMake,
+  VehicleModel,
+  VehicleGeneration,
+  VehicleEngine,
+  VehicleTrim,
+} from "../../types/vehicle-types";
 
-// ---------- Local types (since vehicleApi doesn't export them) ----------
-interface VehicleMake {
-  id: string;
-  name: string;
-  slug?: string;
-}
-
-interface VehicleModel {
-  id: string;
-  name: string;
-  slug?: string;
-}
-
-interface VehicleGeneration {
-  id: string;
-  name: string;
-  yearStart?: number;
-  yearEnd?: number;
-}
-
-interface VehicleEngine {
-  id: string;
-  engineCode: string;
-}
-
-interface VehicleTrim {
-  id: string;
-  name: string;
-}
-
-/* ---------- Toast Component ---------- */
+// ---------- Toast Component ----------
 const Toast = ({ message, type, onClose }: { message: string; type: "success" | "error"; onClose: () => void }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 3000);
@@ -69,7 +46,7 @@ const Toast = ({ message, type, onClose }: { message: string; type: "success" | 
   );
 };
 
-/* ---------- BackToTop ---------- */
+// ---------- BackToTop ----------
 const BackToTop = () => {
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -88,7 +65,7 @@ const BackToTop = () => {
   );
 };
 
-/* ---------- HeroCarousel ---------- */
+// ---------- HeroCarousel ----------
 const HeroCarousel = ({ products }: { products: any[] }) => {
   const navigate = useNavigate();
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -193,7 +170,7 @@ const HeroCarousel = ({ products }: { products: any[] }) => {
   );
 };
 
-/* ---------- Skeletons ---------- */
+// ---------- Skeletons ----------
 const HeroCarouselSkeleton = () => (
   <div className="relative overflow-hidden shadow-2xl bg-gray-200 animate-pulse">
     <div className="w-full h-64 md:h-80 lg:h-96 bg-linear-to-r from-gray-200 to-gray-300" />
@@ -246,8 +223,7 @@ const VehicleFilterSidebarSkeleton = () => (
   </div>
 );
 
-
-/* ---------- VehicleFilterSidebar (UI only – no backend search) ---------- */
+// ---------- VehicleFilterSidebar (now only navigates to search page) ----------
 interface VehicleFilterSidebarProps {
   tempMake: VehicleMake | null;
   tempModel: VehicleModel | null;
@@ -281,16 +257,37 @@ const VehicleFilterSidebar = ({
   onSearch,
   onClearFilters,
 }: VehicleFilterSidebarProps) => {
-  const { data: makes = [], isLoading: makesLoading } = useGetMakesQuery();
-  const { data: models = [], isLoading: modelsLoading } = useGetModelsQuery(tempMake?.id || "", { skip: !tempMake });
-  const { data: generations = [], isLoading: generationsLoading } = useGetGenerationsQuery(tempModel?.id || "", { skip: !tempModel });
-  const { data: engines = [], isLoading: enginesLoading } = useGetEnginesQuery(tempGeneration?.id || "", { skip: !tempGeneration });
-  const { data: trims = [], isLoading: trimsLoading } = useGetTrimsQuery(tempEngine?.id || "", { skip: !tempEngine });
+  const { data: makesData, isLoading: makesLoading } = useGetMakesQuery({ page: 1, limit: 100 });
+  const makes = makesData?.data || [];
+
+  const { data: modelsData, isLoading: modelsLoading } = useGetModelsQuery(
+    { makeId: tempMake?.id, page: 1, limit: 100 },
+    { skip: !tempMake }
+  );
+  const models = modelsData?.data || [];
+
+  const { data: generationsData, isLoading: generationsLoading } = useGetGenerationsQuery(
+    { modelId: tempModel?.id, page: 1, limit: 100 },
+    { skip: !tempModel }
+  );
+  const generations = generationsData?.data || [];
+
+  const { data: enginesData, isLoading: enginesLoading } = useGetEnginesQuery(
+    { generationId: tempGeneration?.id, page: 1, limit: 100 },
+    { skip: !tempGeneration }
+  );
+  const engines = enginesData?.data || [];
+
+  const { data: trimsData, isLoading: trimsLoading } = useGetTrimsQuery(
+    { engineId: tempEngine?.id, page: 1, limit: 100 },
+    { skip: !tempEngine }
+  );
+  const trims = trimsData?.data || [];
 
   const hasActiveFilters = tempMake || tempModel || tempGeneration || tempEngine || tempTrim || tempYear;
 
   const handleMakeChange = (makeId: string) => {
-    const make = makes.find((m: any) => m.id === makeId) || null;
+    const make = makes.find((m: VehicleMake) => m.id === makeId) || null;
     onTempMakeChange(make);
     onTempModelChange(null);
     onTempGenerationChange(null);
@@ -299,7 +296,7 @@ const VehicleFilterSidebar = ({
   };
 
   const handleModelChange = (modelId: string) => {
-    const model = models.find((m: any) => m.id === modelId) || null;
+    const model = models.find((m: VehicleModel) => m.id === modelId) || null;
     onTempModelChange(model);
     onTempGenerationChange(null);
     onTempEngineChange(null);
@@ -307,20 +304,20 @@ const VehicleFilterSidebar = ({
   };
 
   const handleGenerationChange = (genId: string) => {
-    const gen = generations.find((g: any) => g.id === genId) || null;
+    const gen = generations.find((g: VehicleGeneration) => g.id === genId) || null;
     onTempGenerationChange(gen);
     onTempEngineChange(null);
     onTempTrimChange(null);
   };
 
   const handleEngineChange = (engineId: string) => {
-    const engine = engines.find((e: any) => e.id === engineId) || null;
+    const engine = engines.find((e: VehicleEngine) => e.id === engineId) || null;
     onTempEngineChange(engine);
     onTempTrimChange(null);
   };
 
   const handleTrimChange = (trimId: string) => {
-    const trim = trims.find((t: any) => t.id === trimId) || null;
+    const trim = trims.find((t: VehicleTrim) => t.id === trimId) || null;
     onTempTrimChange(trim);
   };
 
@@ -341,7 +338,7 @@ const VehicleFilterSidebar = ({
             disabled={makesLoading}
           >
             <option value="">All Makes</option>
-            {makes.map((make: any) => (
+            {makes.map((make: VehicleMake) => (
               <option key={make.id} value={make.id}>{make.name}</option>
             ))}
           </select>
@@ -357,7 +354,7 @@ const VehicleFilterSidebar = ({
               disabled={modelsLoading}
             >
               <option value="">All Models</option>
-              {models.map((model: any) => (
+              {models.map((model: VehicleModel) => (
                 <option key={model.id} value={model.id}>{model.name}</option>
               ))}
             </select>
@@ -374,7 +371,7 @@ const VehicleFilterSidebar = ({
               disabled={generationsLoading}
             >
               <option value="">All Generations</option>
-              {generations.map((gen: any) => (
+              {generations.map((gen: VehicleGeneration) => (
                 <option key={gen.id} value={gen.id}>
                   {gen.name} ({gen.yearStart}{gen.yearEnd ? `-${gen.yearEnd}` : ""})
                 </option>
@@ -393,7 +390,7 @@ const VehicleFilterSidebar = ({
               disabled={enginesLoading}
             >
               <option value="">All Engines</option>
-              {engines.map((eng: any) => (
+              {engines.map((eng: VehicleEngine) => (
                 <option key={eng.id} value={eng.id}>
                   {eng.engineCode}
                 </option>
@@ -412,7 +409,7 @@ const VehicleFilterSidebar = ({
               disabled={trimsLoading}
             >
               <option value="">All Trims</option>
-              {trims.map((trim: any) => (
+              {trims.map((trim: VehicleTrim) => (
                 <option key={trim.id} value={trim.id}>{trim.name}</option>
               ))}
             </select>
@@ -453,7 +450,7 @@ const VehicleFilterSidebar = ({
   );
 };
 
-/* ---------- SectionHeader ---------- */
+// ---------- SectionHeader ----------
 const SectionHeader = ({ title }: { title: string }) => (
   <div className="flex justify-center items-center mb-5">
     <h2 className="text-xl md:text-2xl font-bold text-gray-800 tracking-tight text-center">
@@ -462,7 +459,7 @@ const SectionHeader = ({ title }: { title: string }) => (
   </div>
 );
 
-/* ---------- Helper functions for curated sections ---------- */
+// ---------- Helper functions for curated sections ----------
 const getProductPrice = (product: any): number => {
   return product.variants?.[0]?.price ?? 0;
 };
@@ -545,11 +542,12 @@ const getCheapestPerCategory = (products: any[], maxItems = 8): any[] => {
 
 /* ========== MAIN HOME COMPONENT ========== */
 export default function Home() {
+  const navigate = useNavigate();
   const { isLoading: userLoading } = useMeQuery();
   const [section1Limit, setSection1Limit] = useState(8);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  // Vehicle filter state (UI only – no backend search yet)
+  // Vehicle filter state (only used for sidebar UI, no filtering on home page)
   const [tempMake, setTempMake] = useState<VehicleMake | null>(null);
   const [tempModel, setTempModel] = useState<VehicleModel | null>(null);
   const [tempGeneration, setTempGeneration] = useState<VehicleGeneration | null>(null);
@@ -590,7 +588,21 @@ export default function Home() {
   })();
 
   const handleSearch = () => {
-    setToast({ message: "Vehicle‑based product search is coming soon!", type: "error" });
+    // Navigate to fitment search page with query parameters
+    const params = new URLSearchParams();
+    if (tempMake?.id) params.set("makeId", tempMake.id);
+    if (tempModel?.id) params.set("modelId", tempModel.id);
+    if (tempGeneration?.id) params.set("generationId", tempGeneration.id);
+    if (tempEngine?.id) params.set("engineId", tempEngine.id);
+    if (tempTrim?.id) params.set("trimId", tempTrim.id);
+    if (tempYear) params.set("year", tempYear);
+    
+    if (!tempMake && !tempModel && !tempGeneration && !tempEngine && !tempTrim && !tempYear) {
+      setToast({ message: "Please select at least one vehicle attribute to search.", type: "error" });
+      return;
+    }
+    
+    navigate(`/fitment-search?${params.toString()}`);
   };
 
   const clearFitmentFilters = () => {
@@ -661,7 +673,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Product sections (no fitment search active) */}
+        {/* Product sections - no fitment filtering on home page */}
         <div className="w-full space-y-10">
           <section>
             <SectionHeader title="MOgrace Auto Store: Buy car parts online" />
@@ -678,24 +690,24 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-                <div className="flex justify-center gap-4 mt-6">
-                  {section1Limit < allProducts.length && (
+                {section1Limit < allProducts.length && (
+                  <div className="flex justify-center gap-4 mt-6">
                     <button
                       onClick={() => setSection1Limit(prev => prev + 8)}
                       className="px-5 py-2 bg-emerald-800 text-white hover:bg-emerald-900 transition"
                     >
                       Show More
                     </button>
-                  )}
-                  {section1Limit > 8 && (
-                    <button
-                      onClick={() => setSection1Limit(8)}
-                      className="px-5 py-2 bg-gray-200 text-gray-800 hover:bg-gray-300 transition"
-                    >
-                      Show Less
-                    </button>
-                  )}
-                </div>
+                    {section1Limit > 8 && (
+                      <button
+                        onClick={() => setSection1Limit(8)}
+                        className="px-5 py-2 bg-gray-200 text-gray-800 hover:bg-gray-300 transition"
+                      >
+                        Show Less
+                      </button>
+                    )}
+                  </div>
+                )}
               </>
             )}
           </section>

@@ -43,6 +43,8 @@ import { useAppDispatch } from "./admin/store/store";
 import { useMeQuery } from "./services/authApi";
 import ShippingRatesManager from "./admin/components/AdminShippingRates";
 import ShippingZonesManager from "./admin/components/AdminShippingZones";
+import AdminVehicles from "./admin/components/AdminVehicles";
+import FitmentSearchPage from "./client/pages/FitmentSearchPage";
 
 function App() {
   const dispatch = useAppDispatch();
@@ -83,6 +85,8 @@ function App() {
           <Route path="feedback" element={<Feedback />} />
           <Route path="about" element={<AboutPage />} />
           <Route path="profile" element={<CustomerProfilePage />} />
+          <Route path="fitment-search" element={<FitmentSearchPage />} />
+
         </Route>
 
         {/* AUTH */}
@@ -120,6 +124,8 @@ function App() {
           <Route path="logistics/zones" element={<ShippingZonesManager />} />
           <Route path="logistics/rates" element={<ShippingRatesManager />} />
           <Route path="logistics/stations" element={<AdminPickupStations />} />
+          <Route path="vehicles" element={<AdminVehicles />} />
+
         </Route>
       </Routes>
 

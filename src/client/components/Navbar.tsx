@@ -5,7 +5,6 @@ import {
   User,
   Menu,
   X,
-  Heart,
   ChevronDown,
   LogOut,
   Package,
@@ -16,6 +15,7 @@ import {
   Clock,
   History,
   Shield,
+  Bookmark,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
@@ -527,7 +527,7 @@ const Navbar = () => {
                     className="relative cursor-pointer text-white hover:text-emerald-100 transition-colors p-1"
                     onClick={() => handleIconNavigation("/wishlist")}
                   >
-                    <Heart size={20} />
+                    <Bookmark size={20} />
                     {wishListCount > 0 && (
                       <span className="absolute -top-2 -right-2 bg-amber-500 text-white text-[10px] px-1.5 rounded-full shadow-md min-w-4.5 text-center leading-tight font-medium">
                         {wishListCount > 99 ? '99+' : wishListCount}
@@ -826,7 +826,7 @@ const Navbar = () => {
                     className="relative bg-gray-50 rounded-xl p-3 text-center cursor-pointer hover:bg-emerald-50 transition-colors"
                     onClick={() => handleIconNavigation("/wishlist")}
                   >
-                    <Heart size={20} className="mx-auto text-gray-600" />
+                    <Bookmark size={20} className="mx-auto text-gray-600" />
                     <span className="text-xs mt-1 block">Wishlist</span>
                     {wishListCount > 0 && (
                       <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[10px] px-1.5 rounded-full">

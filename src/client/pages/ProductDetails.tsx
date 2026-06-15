@@ -9,7 +9,6 @@ import React, {
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ShoppingCart,
-  Heart,
   Check,
   Package,
   Tag,
@@ -24,10 +23,16 @@ import {
   Edit,
   Trash2,
   X,
-  Info,
+  Bookmark,
 } from "lucide-react";
 
-import { useGetProductQuery, type Product } from "../../services/productApi";
+// ------------------------------
+// API IMPORTS
+// ------------------------------
+import {
+  useGetProductQuery,
+  type Product as ApiProduct,
+} from "../../services/productApi";
 import { useAddToCartMutation } from "../../services/cartApi";
 import {
   useGetReviewsQuery,
@@ -36,29 +41,45 @@ import {
   useUpdateReviewMutation,
   useDeleteReviewMutation,
 } from "../../services/reviewApi";
-
 import {
   useGetWishlistQuery,
   useToggleWishlistMutation,
   useRemoveWishlistItemMutation,
 } from "../../services/wishlistApi";
 
-import type { ProductVariant, Media } from "../../schemas/product.schema";
+import {
+  useGetMakesQuery,
+  useGetModelsQuery,
+  useGetGenerationsQuery,
+  useGetEnginesQuery,
+  useGetTrimsQuery,
+} from "../../services/vehicleApi";
 
-interface ExtendedProduct extends Product {
+import type { ProductVariant, Media } from "../../schemas/product.schema";
+import type {
+  VehicleMake,
+  VehicleModel,
+  VehicleGeneration,
+  VehicleEngine,
+  VehicleTrim,
+} from "../../types/vehicle-types";
+
+// Extended product type (fitments only contain IDs, brand/category may be objects)
+interface ExtendedProduct extends ApiProduct {
   brand?: { id: string; name: string } | null;
   category?: { id: string; name: string } | null;
 }
 
+// Helper: compute available stock from inventories
 const getAvailableStock = (
   inventories: Array<{ stock: number; reserved: number }> = []
 ) => {
   return inventories.reduce((sum, inv) => sum + (inv.stock - (inv.reserved || 0)), 0);
 };
 
-// ----------------------------------------------
-// Memoized Toast
-// ----------------------------------------------
+// ------------------------------
+// Toast Component
+// ------------------------------
 const Toast = memo(
   ({
     message,
@@ -76,8 +97,8 @@ const Toast = memo(
 
     return (
       <div
-        className={`fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg animate-slide-up ${
-          type === "success" ? "bg-green-600 text-white" : "bg-red-600 text-white"
+        className={`fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-3 shadow-lg animate-slide-up ${
+          type === "success" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
         }`}
       >
         {type === "success" ? <Check size={18} /> : <AlertCircle size={18} />}
@@ -91,42 +112,220 @@ const Toast = memo(
 );
 Toast.displayName = "Toast";
 
-// ==============================
-// CUSTOM HOOKS (with memoization)
-// ==============================
+// ------------------------------
+// FITMENT TREE VIEW (with left-aligned plus/minus toggles)
+// ------------------------------
+interface FitmentTreeViewProps {
+  fitments: ExtendedProduct["productFitments"];
+}
 
+const FitmentTreeView = memo(({ fitments }: FitmentTreeViewProps) => {
+  const [expandedMakes, setExpandedMakes] = useState<Set<string>>(new Set());
+  const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
+
+  // ✅ FIX: limit must be ≤ 100 (backend validation)
+  const { data: makesData, error: makesError } = useGetMakesQuery({ page: 1, limit: 100 });
+  const { data: modelsData, error: modelsError } = useGetModelsQuery({ page: 1, limit: 100 });
+  const { data: generationsData, error: gensError } = useGetGenerationsQuery({ page: 1, limit: 100 });
+  const { data: enginesData, error: enginesError } = useGetEnginesQuery({ page: 1, limit: 100 });
+  const { data: trimsData, error: trimsError } = useGetTrimsQuery({ page: 1, limit: 100 });
+
+  const hasVehicleDataError = makesError || modelsError || gensError || enginesError || trimsError;
+
+  // Build lookup maps – use empty Map if data missing
+  const makeMap = useMemo(() => {
+    if (!makesData?.data) return new Map<string, string>();
+    const map = new Map<string, string>();
+    makesData.data.forEach((make: VehicleMake) => map.set(make.id, make.name));
+    return map;
+  }, [makesData]);
+
+  const modelMap = useMemo(() => {
+    if (!modelsData?.data) return new Map<string, string>();
+    const map = new Map<string, string>();
+    modelsData.data.forEach((model: VehicleModel) => map.set(model.id, model.name));
+    return map;
+  }, [modelsData]);
+
+  const generationMap = useMemo(() => {
+    if (!generationsData?.data) return new Map<string, string>();
+    const map = new Map<string, string>();
+    generationsData.data.forEach((gen: VehicleGeneration) => map.set(gen.id, gen.name));
+    return map;
+  }, [generationsData]);
+
+  const engineMap = useMemo(() => {
+    if (!enginesData?.data) return new Map<string, string>();
+    const map = new Map<string, string>();
+    enginesData.data.forEach((engine: VehicleEngine) => map.set(engine.id, engine.engineCode));
+    return map;
+  }, [enginesData]);
+
+  const trimMap = useMemo(() => {
+    if (!trimsData?.data) return new Map<string, string>();
+    const map = new Map<string, string>();
+    trimsData.data.forEach((trim: VehicleTrim) => map.set(trim.id, trim.name));
+    return map;
+  }, [trimsData]);
+
+  if (!fitments || fitments.length === 0) {
+    return (
+      <div className="text-center py-12 bg-gray-50">
+        <Package size={48} className="mx-auto text-gray-300 mb-3" />
+        <p className="text-gray-500">No vehicle fitment data available.</p>
+      </div>
+    );
+  }
+
+  // Enrich fitments – fallback to ID snippet if name not found
+  const enrichedFitments = useMemo(() => {
+    return fitments.map((fit) => ({
+      ...fit,
+      makeName: fit.makeId ? makeMap.get(fit.makeId) || `ID: ${fit.makeId.slice(0, 8)}` : null,
+      modelName: fit.modelId ? modelMap.get(fit.modelId) || `ID: ${fit.modelId.slice(0, 8)}` : null,
+      generationName: fit.generationId ? generationMap.get(fit.generationId) || `ID: ${fit.generationId.slice(0, 8)}` : null,
+      engineCode: fit.engineId ? engineMap.get(fit.engineId) || `ID: ${fit.engineId.slice(0, 8)}` : null,
+      trimName: fit.trimId ? trimMap.get(fit.trimId) || `ID: ${fit.trimId.slice(0, 8)}` : null,
+    }));
+  }, [fitments, makeMap, modelMap, generationMap, engineMap, trimMap]);
+
+  const makeGroup = new Map<string, typeof enrichedFitments>();
+  enrichedFitments.forEach((fit) => {
+    const makeName = fit.makeName || "Unknown Make";
+    if (!makeGroup.has(makeName)) makeGroup.set(makeName, []);
+    makeGroup.get(makeName)!.push(fit);
+  });
+
+  const toggleMake = (makeName: string) => {
+    setExpandedMakes((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(makeName)) newSet.delete(makeName);
+      else newSet.add(makeName);
+      return newSet;
+    });
+  };
+
+  const toggleModel = (modelKey: string) => {
+    setExpandedModels((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(modelKey)) newSet.delete(modelKey);
+      else newSet.add(modelKey);
+      return newSet;
+    });
+  };
+
+  return (
+    <div className="space-y-3">
+      {hasVehicleDataError && (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm flex items-center gap-2">
+          <AlertCircle size={18} />
+          <span>Vehicle reference data could not be fully loaded. Some fitment names may appear as IDs.</span>
+        </div>
+      )}
+      {Array.from(makeGroup.entries()).map(([makeName, makeFitments]) => {
+        const modelGroup = new Map<string, typeof makeFitments>();
+        makeFitments.forEach((fit) => {
+          const modelName = fit.modelName || "Unknown Model";
+          const key = `${makeName}|${modelName}`;
+          if (!modelGroup.has(key)) modelGroup.set(key, []);
+          modelGroup.get(key)!.push(fit);
+        });
+
+        const isMakeExpanded = expandedMakes.has(makeName);
+
+        return (
+          <div key={makeName} className="border border-gray-200 overflow-hidden">
+            <button
+              onClick={() => toggleMake(makeName)}
+              className="w-full flex items-center gap-2 px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+            >
+              {isMakeExpanded ? <Minus size={18} /> : <Plus size={18} />}
+              <span className="font-semibold text-gray-900">{makeName}</span>
+            </button>
+
+            {isMakeExpanded && (
+              <div className="p-3 space-y-2 bg-white">
+                {Array.from(modelGroup.entries()).map(([modelKey, modelFitments]) => {
+                  const modelName = modelKey.split("|")[1];
+                  const isModelExpanded = expandedModels.has(modelKey);
+
+                  return (
+                    <div key={modelKey} className="border-l-2 border-emerald-200 pl-3">
+                      <button
+                        onClick={() => toggleModel(modelKey)}
+                        className="w-full flex items-center gap-2 py-2 px-2 hover:bg-gray-50"
+                      >
+                        {isModelExpanded ? <Minus size={16} /> : <Plus size={16} />}
+                        <span className="font-medium text-gray-800">{modelName}</span>
+                      </button>
+
+                      {isModelExpanded && (
+                        <div className="ml-4 mt-2 space-y-2">
+                          {modelFitments.map((fit, idx) => {
+                            const details = [
+                              fit.generationName && `Generation: ${fit.generationName}`,
+                              fit.engineCode && `Engine: ${fit.engineCode}`,
+                              fit.trimName && `Trim: ${fit.trimName}`,
+                              fit.yearStart &&
+                                (fit.yearEnd
+                                  ? `Years: ${fit.yearStart} - ${fit.yearEnd}`
+                                  : `Years: ${fit.yearStart}+`),
+                            ]
+                              .filter(Boolean)
+                              .join(" • ");
+
+                            return (
+                              <div
+                                key={idx}
+                                className="text-sm text-gray-600 py-1 border-b border-gray-100 last:border-0"
+                              >
+                                {details || "Full compatibility"}
+                                {fit.notes && (
+                                  <span className="block text-xs text-gray-400 mt-1">Note: {fit.notes}</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+FitmentTreeView.displayName = "FitmentTreeView";
+
+// ------------------------------
+// CUSTOM HOOKS
+// ------------------------------
 function useProductData(productId: string | undefined) {
+  // ✅ FIX: useGetProductQuery returns the product directly (transformResponse already extracts res.product)
   const {
     data: product,
     isLoading: loading,
     error: productError,
-    refetch: refetchProduct,
   } = useGetProductQuery(productId || "", { skip: !productId });
 
   const {
     data: reviews = [],
     isLoading: reviewsLoading,
     error: reviewsError,
-    refetch: refetchReviews,
   } = useGetReviewsQuery(productId || "", { skip: !productId });
 
-  const { data: ratingSummary, refetch: refetchSummary } = useGetRatingSummaryQuery(
-    productId || "",
-    { skip: !productId }
-  );
-
-  useEffect(() => {
-    if (productId) {
-      refetchProduct();
-      refetchReviews();
-      refetchSummary();
-    }
-  }, [productId, refetchProduct, refetchReviews, refetchSummary]);
+  const { data: ratingSummary } = useGetRatingSummaryQuery(productId || "", {
+    skip: !productId,
+  });
 
   const averageRating = ratingSummary?.averageRating || 0;
   const totalReviews = ratingSummary?.totalReviews || 0;
 
-  const extendedProduct: ExtendedProduct | null = product ? { ...product } as ExtendedProduct : null;
+  const extendedProduct: ExtendedProduct | null = product ? (product as ExtendedProduct) : null;
 
   return useMemo(
     () => ({
@@ -188,9 +387,7 @@ function useCartActions(
   const [addToCart, { isLoading: adding }] = useAddToCartMutation();
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(
-    null
-  );
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const increaseQty = useCallback(() => {
     if (quantity < stockStatus.totalStock) setQuantity((q) => q + 1);
@@ -315,10 +512,9 @@ function useReviewActions(productId: string | undefined) {
   );
 }
 
-// ==============================
-// HELPER COMPONENTS (memoized)
-// ==============================
-
+// ------------------------------
+// HELPER COMPONENTS
+// ------------------------------
 const StarRatingInput = memo(
   ({
     rating,
@@ -391,16 +587,14 @@ const ReviewForm = memo(
     };
 
     return (
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm p-5 space-y-4 border border-gray-100">
+      <form onSubmit={handleSubmit} className="bg-white shadow-sm p-5 space-y-4 border border-gray-100">
         {(validationError || error) && (
-          <div className="text-sm text-red-600 bg-red-50 p-2 rounded-lg flex items-center gap-2">
+          <div className="text-sm text-red-600 bg-red-50 p-2 flex items-center gap-2">
             <AlertCircle size={16} /> {validationError || error}
           </div>
         )}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Rating <span className="text-red-500">*</span>
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Rating *</label>
           <StarRatingInput rating={rating} onChange={setRating} size={28} />
         </div>
         <div>
@@ -410,33 +604,31 @@ const ReviewForm = memo(
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Summarize your experience"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+            className="w-full px-3 py-2 border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Review <span className="text-red-500">*</span>
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Review *</label>
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder="Share your thoughts about this product..."
             rows={3}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+            className="w-full px-3 py-2 border border-gray-300 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"
           />
         </div>
         <div className="flex gap-3 pt-2">
           <button
             type="submit"
             disabled={loading}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 transition"
+            className="px-4 py-2 bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50 transition"
           >
             {loading ? "Submitting..." : initialData ? "Update Review" : "Submit Review"}
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-2 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition"
+            className="px-4 py-2 border border-gray-300 font-medium hover:bg-gray-50 transition"
           >
             Cancel
           </button>
@@ -461,7 +653,7 @@ const ProductImageGallery = memo(
 
     return (
       <div className="space-y-4">
-        <div className="aspect-square bg-gray-100 rounded-2xl overflow-hidden shadow-md">
+        <div className="aspect-square bg-gray-100 overflow-hidden shadow-md">
           {mainImage ? (
             <img
               src={mainImage}
@@ -481,9 +673,9 @@ const ProductImageGallery = memo(
                 key={media.id || `${media.url}-${idx}`}
                 onMouseEnter={() => setMainImage(media.url)}
                 onClick={() => setMainImage(media.url)}
-                className={`shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${
+                className={`shrink-0 w-20 h-20 overflow-hidden border-2 transition-all ${
                   mainImage === media.url
-                    ? "border-green-500 shadow-md"
+                    ? "border-emerald-500 shadow-md"
                     : "border-gray-200 hover:border-gray-300"
                 }`}
               >
@@ -515,9 +707,9 @@ const VariantSelector = memo(
           <button
             key={variant.id}
             onClick={() => variant.id && onChange(variant.id)}
-            className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+            className={`px-4 py-2 border text-sm font-medium transition-all ${
               selectedId === variant.id
-                ? "border-green-600 bg-green-50 text-green-700 shadow-sm"
+                ? "border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm"
                 : "border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:shadow-sm"
             }`}
             disabled={!variant.id}
@@ -533,31 +725,27 @@ VariantSelector.displayName = "VariantSelector";
 
 const ProductDetailsSkeleton = memo(() => (
   <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div className="h-8 w-24 bg-gray-200 rounded-lg animate-pulse mb-6" />
+    <div className="h-8 w-24 bg-gray-200 animate-pulse mb-6" />
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
       <div className="space-y-4">
-        <div className="aspect-square bg-gray-200 rounded-2xl animate-pulse" />
-        <div className="flex gap-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="w-20 h-20 bg-gray-200 rounded-lg animate-pulse" />
-          ))}
-        </div>
+        <div className="aspect-square bg-gray-200 animate-pulse" />
+        <div className="flex gap-2">{/* thumbnails */}</div>
       </div>
       <div className="space-y-6">
-        <div className="h-8 bg-gray-200 rounded w-3/4 animate-pulse" />
-        <div className="h-4 bg-gray-200 rounded w-1/2 animate-pulse" />
-        <div className="h-20 bg-gray-200 rounded animate-pulse" />
-        <div className="h-10 bg-gray-200 rounded w-32 animate-pulse" />
-        <div className="h-12 bg-gray-200 rounded animate-pulse" />
+        <div className="h-8 bg-gray-200 w-3/4 animate-pulse" />
+        <div className="h-4 bg-gray-200 w-1/2 animate-pulse" />
+        <div className="h-20 bg-gray-200 animate-pulse" />
+        <div className="h-10 bg-gray-200 w-32 animate-pulse" />
+        <div className="h-12 bg-gray-200 animate-pulse" />
       </div>
     </div>
   </div>
 ));
 ProductDetailsSkeleton.displayName = "ProductDetailsSkeleton";
 
-// ==============================
-// MAIN COMPONENT (memoized)
-// ==============================
+// ------------------------------
+// MAIN COMPONENT
+// ------------------------------
 const ProductDetails = memo(() => {
   const { id: productId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -584,7 +772,7 @@ const ProductDetails = memo(() => {
     useRemoveWishlistItemMutation();
 
   const [mainImage, setMainImage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"specs" | "fitment" | "reviews">("specs");
+  const [activeTab, setActiveTab] = useState<"specs" | "reviews">("specs");
   const [showStickyBar, setShowStickyBar] = useState(false);
   const observerRef = useRef<HTMLDivElement>(null);
   const reviewSectionRef = useRef<HTMLDivElement>(null);
@@ -680,7 +868,7 @@ const ProductDetails = memo(() => {
         <p className="text-gray-600 text-center">{errorMsg}</p>
         <button
           onClick={() => navigate("/")}
-          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+          className="px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 transition"
         >
           Back to Shop
         </button>
@@ -695,37 +883,46 @@ const ProductDetails = memo(() => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-1 text-gray-500 hover:text-green-600 mb-6 transition group"
+          className="flex items-center gap-1 text-gray-500 hover:text-emerald-600 mb-6 transition group"
         >
           <ChevronLeft size={20} className="group-hover:-translate-x-1 transition" />
           <span>Back</span>
         </button>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-          <div className="animate-fade-in">
+          {/* Left Column: Gallery + Fitment */}
+          <div className="animate-fade-in space-y-8">
             <ProductImageGallery
               medias={product.medias || []}
               mainImage={mainImage}
               setMainImage={setMainImage}
             />
+            {/* Vehicle Fitment section moved here, below thumbnails */}
+            {product.productFitments && product.productFitments.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-lg font-semibold mb-3">Compatibility with passenger cars</h3>
+                <FitmentTreeView fitments={product.productFitments} />
+              </div>
+            )}
           </div>
 
+          {/* Right Column: Product Info */}
           <div className="space-y-6 animate-slide-up">
             <div ref={observerRef} className="relative -top-20" />
 
             <div className="flex flex-wrap gap-2">
               {product.brand?.name && (
-                <span className="text-xs font-medium text-green-700 bg-green-50 px-2.5 py-1 rounded-full">
+                <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1">
                   Brand: {product.brand.name}
                 </span>
               )}
               {product.category?.name && (
-                <span className="text-xs text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full">
+                <span className="text-xs text-gray-600 bg-gray-100 px-2.5 py-1">
                   Category: {product.category.name}
                 </span>
               )}
               {oemDisplay && (
-                <span className="text-xs text-gray-500 font-mono bg-gray-50 px-2.5 py-1 rounded-full flex items-center gap-1">
+                <span className="text-xs text-gray-500 font-mono bg-gray-50 px-2.5 py-1 flex items-center gap-1">
                   <Tag size={12} /> OEM: {oemDisplay}
                 </span>
               )}
@@ -753,7 +950,7 @@ const ProductDetails = memo(() => {
               </span>
               <button
                 onClick={handleWriteReviewClick}
-                className="ml-auto text-sm text-green-600 hover:text-green-700 font-medium transition"
+                className="ml-auto text-sm text-emerald-600 hover:text-emerald-700 font-medium transition"
               >
                 Write a review
               </button>
@@ -773,7 +970,7 @@ const ProductDetails = memo(() => {
               <div className="flex items-baseline gap-2">
                 {selectedVariant ? (
                   <>
-                    <span className="text-3xl font-bold text-green-600">
+                    <span className="text-3xl font-bold text-emerald-600">
                       ₦{selectedVariant.price.toLocaleString()}
                     </span>
                     {selectedVariant.compareAtPrice && selectedVariant.compareAtPrice > 0 && (
@@ -788,8 +985,8 @@ const ProductDetails = memo(() => {
               </div>
               {stockStatus.available ? (
                 <div className="flex items-center gap-2 text-sm">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                  <span className="text-green-700 font-medium">In stock</span>
+                  <div className="w-2 h-2 bg-emerald-500 animate-pulse" />
+                  <span className="text-emerald-700 font-medium">In stock</span>
                   <span className="text-gray-500">({stockStatus.totalStock} units)</span>
                   {stockStatus.isLowStock && (
                     <span className="text-orange-600">– Only {stockStatus.totalStock} left</span>
@@ -806,11 +1003,11 @@ const ProductDetails = memo(() => {
               <button
                 onClick={handleAddToCart}
                 disabled={!selectedVariantId || adding || !stockStatus.available}
-                className={`flex-1 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all ${
+                className={`flex-1 py-3 font-semibold flex items-center justify-center gap-2 transition-all ${
                   added
-                    ? "bg-green-700 text-white"
+                    ? "bg-emerald-700 text-white"
                     : stockStatus.available
-                    ? "bg-green-600 hover:bg-green-700 text-white shadow-md hover:shadow-lg"
+                    ? "bg-emerald-600 hover:bg-emerald-700 text-white shadow-md hover:shadow-lg"
                     : "bg-gray-300 text-gray-500 cursor-not-allowed"
                 }`}
               >
@@ -819,7 +1016,7 @@ const ProductDetails = memo(() => {
                     <Check size={20} /> Added to Cart
                   </>
                 ) : adding ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent animate-spin" />
                 ) : (
                   <>
                     <ShoppingCart size={20} /> Add to Cart
@@ -829,13 +1026,13 @@ const ProductDetails = memo(() => {
               <button
                 onClick={handleWishlistToggle}
                 disabled={wishlistLoading}
-                className="p-3 border border-gray-300 rounded-xl hover:bg-gray-50 transition disabled:opacity-50 group relative"
+                className="p-3 border border-gray-300 hover:bg-gray-50 transition disabled:opacity-50 group relative"
                 aria-label={isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
               >
                 {wishlistLoading ? (
-                  <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent animate-spin" />
                 ) : (
-                  <Heart
+                  <Bookmark
                     size={20}
                     className={`transition-all ${
                       isInWishlist
@@ -849,26 +1046,27 @@ const ProductDetails = memo(() => {
 
             <div className="grid grid-cols-2 gap-3 pt-2">
               <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Truck size={18} className="text-green-600" />
+                <Truck size={18} className="text-emerald-600" />
                 <span>Fast delivery</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-600">
-                <RefreshCw size={18} className="text-green-600" />
+                <RefreshCw size={18} className="text-emerald-600" />
                 <span>30-day returns</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-600">
-                <ShieldCheck size={18} className="text-green-600" />
+                <ShieldCheck size={18} className="text-emerald-600" />
                 <span>2-year warranty</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Tag size={18} className="text-green-600" />
+                <Tag size={18} className="text-emerald-600" />
                 <span>Secure payment</span>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="mt-16 bg-white rounded-xl shadow-sm overflow-hidden">
+        {/* Tabs Section - only Specifications and Reviews now */}
+        <div className="mt-16 bg-white shadow-sm overflow-hidden">
           <div className="border-b border-gray-200 px-6">
             <nav className="flex gap-6 overflow-x-auto custom-scrollbar">
               {product.specifications && product.specifications.length > 0 && (
@@ -876,30 +1074,18 @@ const ProductDetails = memo(() => {
                   onClick={() => setActiveTab("specs")}
                   className={`py-4 text-sm font-medium transition-colors whitespace-nowrap ${
                     activeTab === "specs"
-                      ? "text-green-600 border-b-2 border-green-600"
+                      ? "text-emerald-600 border-b-2 border-emerald-600"
                       : "text-gray-500 hover:text-gray-700"
                   }`}
                 >
                   Specifications
                 </button>
               )}
-              {product.productFitments && product.productFitments.length > 0 && (
-                <button
-                  onClick={() => setActiveTab("fitment")}
-                  className={`py-4 text-sm font-medium transition-colors whitespace-nowrap ${
-                    activeTab === "fitment"
-                      ? "text-green-600 border-b-2 border-green-600"
-                      : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  Vehicle Fitment
-                </button>
-              )}
               <button
                 onClick={() => setActiveTab("reviews")}
                 className={`py-4 text-sm font-medium transition-colors whitespace-nowrap ${
                   activeTab === "reviews"
-                    ? "text-green-600 border-b-2 border-green-600"
+                    ? "text-emerald-600 border-b-2 border-emerald-600"
                     : "text-gray-500 hover:text-gray-700"
                 }`}
               >
@@ -920,25 +1106,6 @@ const ProductDetails = memo(() => {
               </dl>
             )}
 
-            {activeTab === "fitment" &&
-              product.productFitments &&
-              product.productFitments.length > 0 && (
-                <div className="space-y-2">
-                  {product.productFitments.map((fit, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-start gap-2 text-sm text-gray-600 py-2 border-b border-gray-100"
-                    >
-                      <Info size={16} className="text-green-500 mt-0.5" />
-                      <span>
-                        <strong>Trim ID:</strong> {fit.trimId}{" "}
-                        {fit.notes && <>– {fit.notes}</>}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
             {activeTab === "reviews" && (
               <div>
                 {reviewActions.showCreateForm && (
@@ -955,19 +1122,19 @@ const ProductDetails = memo(() => {
 
                 {reviewsLoading ? (
                   <div className="flex justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600" />
+                    <div className="animate-spin h-8 w-8 border-b-2 border-emerald-600" />
                   </div>
                 ) : reviewsError ? (
                   <div className="text-center py-8 text-red-500 flex items-center justify-center gap-2">
                     <AlertCircle size={20} /> Failed to load reviews
                   </div>
                 ) : reviews.length === 0 && !reviewActions.showCreateForm ? (
-                  <div className="text-center py-12 bg-gray-50 rounded-xl">
+                  <div className="text-center py-12 bg-gray-50">
                     <Star size={48} className="mx-auto text-gray-300 mb-3" />
                     <p className="text-gray-500">No reviews yet.</p>
                     <button
                       onClick={handleWriteReviewClick}
-                      className="mt-3 text-green-600 hover:text-green-700 font-medium transition"
+                      className="mt-3 text-emerald-600 hover:text-emerald-700 font-medium transition"
                     >
                       Be the first to review this product
                     </button>
@@ -1019,12 +1186,12 @@ const ProductDetails = memo(() => {
                             <div className="flex gap-2">
                               <button
                                 onClick={() => reviewActions.setEditingReviewId(review.id)}
-                                className="p-1 text-gray-400 hover:text-green-600 transition"
+                                className="p-1 text-gray-400 hover:text-emerald-600 transition"
                               >
                                 <Edit size={16} />
                               </button>
                               {reviewActions.deleteConfirmId === review.id ? (
-                                <div className="flex items-center gap-1 bg-gray-100 rounded px-2 py-1">
+                                <div className="flex items-center gap-1 bg-gray-100 px-2 py-1">
                                   <button
                                     onClick={() => reviewActions.handleDelete(review.id)}
                                     className="text-xs text-red-600 hover:text-red-700"
@@ -1063,17 +1230,13 @@ const ProductDetails = memo(() => {
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg p-4 flex items-center justify-between gap-3 animate-slide-up z-40 md:hidden">
           <div>
             <p className="text-sm font-medium text-gray-900">{product.name}</p>
-            <p className="text-lg font-bold text-green-600">
+            <p className="text-lg font-bold text-emerald-600">
               ₦{selectedVariant?.price?.toLocaleString()}
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center border border-gray-300 rounded-lg">
-              <button
-                onClick={decreaseQty}
-                className="px-3 py-1.5"
-                disabled={quantity <= 1}
-              >
+            <div className="flex items-center border border-gray-300">
+              <button onClick={decreaseQty} className="px-3 py-1.5" disabled={quantity <= 1}>
                 <Minus size={16} />
               </button>
               <span className="w-8 text-center">{quantity}</span>
@@ -1088,10 +1251,10 @@ const ProductDetails = memo(() => {
             <button
               onClick={handleAddToCart}
               disabled={adding}
-              className="bg-green-600 text-white px-5 py-2 rounded-xl font-semibold flex items-center gap-2"
+              className="bg-emerald-600 text-white px-5 py-2 font-semibold flex items-center gap-2"
             >
               {adding ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-white border-t-transparent animate-spin" />
               ) : (
                 <ShoppingCart size={18} />
               )}

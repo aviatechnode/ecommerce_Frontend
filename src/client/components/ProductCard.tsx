@@ -1,8 +1,8 @@
 import {
   ShoppingCartIcon,
-  Heart,
   Check,
   Package,
+  Bookmark,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useState, useMemo } from "react";
@@ -186,7 +186,7 @@ export default function ProductCard({ product }: Props) {
             ${heartAnimating ? "scale-125" : "scale-100"}
           `}
         >
-          <Heart
+          <Bookmark
             size={16}
             className={`
               transition-all duration-200

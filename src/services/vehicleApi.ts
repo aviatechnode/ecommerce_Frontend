@@ -36,7 +36,7 @@ export const vehicleApi = createApi({
     // ///////////////
     getMakes: builder.query<PaginatedResponse<VehicleMake>, Record<string, unknown>>({
       query: (params) => ({
-        url: "/vehicles/makes",
+        url: "/api/vehicles/makes",
         method: "GET",
         params,
       }),
@@ -45,7 +45,7 @@ export const vehicleApi = createApi({
 
     getMakeById: builder.query<VehicleMake, string>({
       query: (id) => ({
-        url: `/vehicles/makes/${id}`,
+        url: `/api/vehicles/makes/${id}`,
         method: "GET",
       }),
       providesTags: ["VehicleMake"],
@@ -53,7 +53,7 @@ export const vehicleApi = createApi({
 
     createMake: builder.mutation<VehicleMake, CreateVehicleMakeDto>({
       query: (data) => ({
-        url: "/vehicles/makes",
+        url: "/api/vehicles/makes",
         method: "POST",
         data,
       }),
@@ -62,7 +62,7 @@ export const vehicleApi = createApi({
 
     updateMake: builder.mutation<VehicleMake, { id: string; data: UpdateVehicleMakeDto }>({
       query: ({ id, data }) => ({
-        url: `/vehicles/makes/${id}`,
+        url: `/api/vehicles/makes/${id}`,
         method: "PATCH",
         data,
       }),
@@ -71,7 +71,7 @@ export const vehicleApi = createApi({
 
     deleteMake: builder.mutation<VehicleMake, string>({
       query: (id) => ({
-        url: `/vehicles/makes/${id}`,
+        url: `/api/vehicles/makes/${id}`,
         method: "DELETE",
       }),
       invalidatesTags: ["VehicleMake"],
@@ -82,7 +82,7 @@ export const vehicleApi = createApi({
     // ///////////////
     getModels: builder.query<PaginatedResponse<VehicleModel>, Record<string, unknown>>({
       query: (params) => ({
-        url: "/vehicles/models",
+        url: "/api/vehicles/models",
         method: "GET",
         params,
       }),
@@ -91,7 +91,7 @@ export const vehicleApi = createApi({
 
     getModelById: builder.query<VehicleModel, string>({
       query: (id) => ({
-        url: `/vehicles/models/${id}`,
+        url: `/api/vehicles/models/${id}`,
         method: "GET",
       }),
       providesTags: ["VehicleModel"],
@@ -99,7 +99,7 @@ export const vehicleApi = createApi({
 
     createModel: builder.mutation<VehicleModel, CreateVehicleModelDto>({
       query: (data) => ({
-        url: "/vehicles/models",
+        url: "/api/vehicles/models",
         method: "POST",
         data,
       }),
@@ -108,7 +108,7 @@ export const vehicleApi = createApi({
 
     updateModel: builder.mutation<VehicleModel, { id: string; data: UpdateVehicleModelDto }>({
       query: ({ id, data }) => ({
-        url: `/vehicles/models/${id}`,
+        url: `/api/vehicles/models/${id}`,
         method: "PATCH",
         data,
       }),
@@ -117,7 +117,7 @@ export const vehicleApi = createApi({
 
     deleteModel: builder.mutation<VehicleModel, string>({
       query: (id) => ({
-        url: `/vehicles/models/${id}`,
+        url: `/api/vehicles/models/${id}`,
         method: "DELETE",
       }),
       invalidatesTags: ["VehicleModel"],
@@ -128,7 +128,7 @@ export const vehicleApi = createApi({
     // ///////////////
     getGenerations: builder.query<PaginatedResponse<VehicleGeneration>, Record<string, unknown>>({
       query: (params) => ({
-        url: "/vehicles/generations",
+        url: "/api/vehicles/generations",
         method: "GET",
         params,
       }),
@@ -137,7 +137,7 @@ export const vehicleApi = createApi({
 
     getGenerationById: builder.query<VehicleGeneration, string>({
       query: (id) => ({
-        url: `/vehicles/generations/${id}`,
+        url: `/api/vehicles/generations/${id}`,
         method: "GET",
       }),
       providesTags: ["VehicleGeneration"],
@@ -145,7 +145,7 @@ export const vehicleApi = createApi({
 
     createGeneration: builder.mutation<VehicleGeneration, CreateVehicleGenerationDto>({
       query: (data) => ({
-        url: "/vehicles/generations",
+        url: "/api/vehicles/generations",
         method: "POST",
         data,
       }),
@@ -157,7 +157,7 @@ export const vehicleApi = createApi({
       { id: string; data: UpdateVehicleGenerationDto }
     >({
       query: ({ id, data }) => ({
-        url: `/vehicles/generations/${id}`,
+        url: `/api/vehicles/generations/${id}`,
         method: "PATCH",
         data,
       }),
@@ -166,7 +166,7 @@ export const vehicleApi = createApi({
 
     deleteGeneration: builder.mutation<VehicleGeneration, string>({
       query: (id) => ({
-        url: `/vehicles/generations/${id}`,
+        url: `/api/vehicles/generations/${id}`,
         method: "DELETE",
       }),
       invalidatesTags: ["VehicleGeneration"],
@@ -177,7 +177,7 @@ export const vehicleApi = createApi({
     // ///////////////
     getEngines: builder.query<PaginatedResponse<VehicleEngine>, Record<string, unknown>>({
       query: (params) => ({
-        url: "/vehicles/engines",
+        url: "/api/vehicles/engines",
         method: "GET",
         params,
       }),
@@ -186,7 +186,7 @@ export const vehicleApi = createApi({
 
     getEngineById: builder.query<VehicleEngine, string>({
       query: (id) => ({
-        url: `/vehicles/engines/${id}`,
+        url: `/api/vehicles/engines/${id}`,
         method: "GET",
       }),
       providesTags: ["VehicleEngine"],
@@ -194,7 +194,7 @@ export const vehicleApi = createApi({
 
     createEngine: builder.mutation<VehicleEngine, CreateVehicleEngineDto>({
       query: (data) => ({
-        url: "/vehicles/engines",
+        url: "/api/vehicles/engines",
         method: "POST",
         data,
       }),
@@ -203,7 +203,7 @@ export const vehicleApi = createApi({
 
     updateEngine: builder.mutation<VehicleEngine, { id: string; data: UpdateVehicleEngineDto }>({
       query: ({ id, data }) => ({
-        url: `/vehicles/engines/${id}`,
+        url: `/api/vehicles/engines/${id}`,
         method: "PATCH",
         data,
       }),
@@ -212,7 +212,7 @@ export const vehicleApi = createApi({
 
     deleteEngine: builder.mutation<VehicleEngine, string>({
       query: (id) => ({
-        url: `/vehicles/engines/${id}`,
+        url: `/api/vehicles/engines/${id}`,
         method: "DELETE",
       }),
       invalidatesTags: ["VehicleEngine"],
@@ -223,7 +223,7 @@ export const vehicleApi = createApi({
     // ///////////////
     getTrims: builder.query<PaginatedResponse<VehicleTrim>, Record<string, unknown>>({
       query: (params) => ({
-        url: "/vehicles/trims",
+        url: "/api/vehicles/trims",
         method: "GET",
         params,
       }),
@@ -232,7 +232,7 @@ export const vehicleApi = createApi({
 
     getTrimById: builder.query<VehicleTrim, string>({
       query: (id) => ({
-        url: `/vehicles/trims/${id}`,
+        url: `/api/vehicles/trims/${id}`,
         method: "GET",
       }),
       providesTags: ["VehicleTrim"],
@@ -240,7 +240,7 @@ export const vehicleApi = createApi({
 
     createTrim: builder.mutation<VehicleTrim, CreateVehicleTrimDto>({
       query: (data) => ({
-        url: "/vehicles/trims",
+        url: "/api/vehicles/trims",
         method: "POST",
         data,
       }),
@@ -249,7 +249,7 @@ export const vehicleApi = createApi({
 
     updateTrim: builder.mutation<VehicleTrim, { id: string; data: UpdateVehicleTrimDto }>({
       query: ({ id, data }) => ({
-        url: `/vehicles/trims/${id}`,
+        url: `/api/vehicles/trims/${id}`,
         method: "PATCH",
         data,
       }),
@@ -258,7 +258,7 @@ export const vehicleApi = createApi({
 
     deleteTrim: builder.mutation<VehicleTrim, string>({
       query: (id) => ({
-        url: `/vehicles/trims/${id}`,
+        url: `/api/vehicles/trims/${id}`,
         method: "DELETE",
       }),
       invalidatesTags: ["VehicleTrim"],
