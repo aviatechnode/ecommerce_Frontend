@@ -1,6 +1,6 @@
 import { shipmentApi } from './../../services/shipmentApi';
 import { configureStore } from "@reduxjs/toolkit";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector, type TypedUseSelectorHook } from "react-redux";
 
 /* ================= EXISTING SLICES ================= */
 
@@ -29,6 +29,7 @@ import { shippingZoneApi } from '../../services/shippingZoneApi';
 import { pickupStationApi } from '../../services/pickupStationApi';
 import stepReducer from '../../admin/steps/util/stepSlice';
 import { vehicleApi } from '../../services/vehicleApi';
+import { chatApi } from '../../services/chatApi';
 
 /* ================= STORE ================= */
 
@@ -60,6 +61,7 @@ export const store = configureStore({
     [pickupStationApi.reducerPath]: pickupStationApi.reducer,
     [shipmentApi.reducerPath]: shipmentApi.reducer,
     [vehicleApi.reducerPath]: vehicleApi.reducer,
+    [chatApi.reducerPath]: chatApi.reducer,
   },
 
   middleware: (getDefaultMiddleware) =>
@@ -85,7 +87,8 @@ export const store = configureStore({
       shippingZoneApi.middleware,
       pickupStationApi.middleware,
       shipmentApi.middleware,
-      vehicleApi.middleware
+      vehicleApi.middleware,
+      chatApi.middleware,
     ),
 });
 
@@ -97,3 +100,6 @@ export type AppDispatch = typeof store.dispatch;
 /* ================= HOOK ================= */
 
 export const useAppDispatch = () => useDispatch<AppDispatch>();
+
+export const useAppSelector: TypedUseSelectorHook<RootState> =
+  useSelector;

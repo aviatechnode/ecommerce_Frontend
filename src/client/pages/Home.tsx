@@ -5,7 +5,6 @@ import {
   ChevronRight,
   X,
   Check,
-  ArrowUp,
   Calendar,
 } from "lucide-react";
 import { useGetProductsQuery } from "../../services/productApi";
@@ -43,25 +42,6 @@ const Toast = ({ message, type, onClose }: { message: string; type: "success" | 
         <span className="text-sm font-medium">{message}</span>
       </div>
     </div>
-  );
-};
-
-// ---------- BackToTop ----------
-const BackToTop = () => {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const toggleVisibility = () => setVisible(window.scrollY > 500);
-    window.addEventListener("scroll", toggleVisibility);
-    return () => window.removeEventListener("scroll", toggleVisibility);
-  }, []);
-  if (!visible) return null;
-  return (
-    <button
-      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-      className="fixed bottom-6 cursor-pointer right-6 z-40 bg-green-600 hover:bg-green-700 text-white p-3 shadow-lg transition-all duration-300 hover:scale-110"
-    >
-      <ArrowUp size={20} />
-    </button>
   );
 };
 
@@ -776,7 +756,7 @@ export default function Home() {
           </section>
         </div>
       </div>
-      <BackToTop />
+  
     </div>
   );
 }

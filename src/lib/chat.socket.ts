@@ -1,123 +1,314 @@
+import { io, Socket } from "socket.io-client";
+
+import { store } from "../admin/store/store";
+import { chatApi } from "../services/chatApi";
+
+import type {
+  Message,
+  TypingEvent,
+  ReadReceiptEvent,
+  StatusChangedEvent,
+  PriorityChangedEvent,
+} from "../types/chat.types";
+
+type TypingListener = (
+  payload: TypingEvent,
+  typing: boolean
+) => void;
+
 class ChatSocket {
-  private ws: WebSocket | null = null;
-  private listeners = new Map<string, Set<Function>>();
+  private socket: Socket |null = null;
 
-  private token: string | null = null;
+  private initialized = false;
 
-  /* =========================
-     CONNECT
-  ========================== */
-  connect(token: string) {
-    this.token = token;
+  /**
+   * Subscribers interested in typing events.
+   */
+  private typingListeners = new Set<TypingListener>();
 
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
+  /**
+   * Initialize socket once for the entire application.
+   * Call this after the user logs in.
+   */
+  initialize(token?: string) {
+    if (this.initialized) return;
 
-    this.ws = new WebSocket(
-      `${import.meta.env.VITE_WS_URL}?token=${token}`
+    this.socket = io(import.meta.env.VITE_API_URL, {
+      transports: ["websocket"],
+      auth: {
+        token,
+      },
+      autoConnect: true,
+    });
+
+    this.registerListeners();
+
+    this.initialized = true;
+  }
+
+  /**
+   * Disconnect when logging out.
+   */
+  destroy() {
+    this.socket?.disconnect();
+    this.socket = null;
+    this.initialized = false;
+    this.typingListeners.clear();
+  }
+
+  get connected() {
+    return this.socket?.connected ?? false;
+  }
+
+  /**
+   * Subscribe to typing events.
+   */
+  onTyping(listener: TypingListener) {
+    this.typingListeners.add(listener);
+
+    return () => {
+      this.typingListeners.delete(listener);
+    };
+  }
+
+  private emitTyping(
+    payload: TypingEvent,
+    typing: boolean
+  ) {
+    this.typingListeners.forEach((listener) =>
+      listener(payload, typing)
+    );
+  }
+
+  private registerListeners() {
+    if (!this.socket) return;
+
+    this.socket.on("connect", () => {
+      console.log("Chat socket connected");
+    });
+
+    this.socket.on("disconnect", () => {
+      console.log("Chat socket disconnected");
+    });
+
+    /**
+     * NEW MESSAGE
+     */
+    this.socket.on(
+      "message.created",
+      (message: Message) => {
+        store.dispatch(
+          chatApi.util.updateQueryData(
+            "getMessages",
+            {
+              conversationId:
+                message.conversationId,
+            },
+            (draft) => {
+              draft.data.push(message);
+            }
+          )
+        );
+
+        store.dispatch(
+          chatApi.util.invalidateTags([
+            {
+              type: "Conversation",
+              id: message.conversationId,
+            },
+          ])
+        );
+      }
     );
 
-    this.ws.onopen = () => {
-      console.log("✅ Chat socket connected");
-    };
+    /**
+     * MESSAGE UPDATED
+     */
+    this.socket.on(
+      "message.updated",
+      (message: Message) => {
+        store.dispatch(
+          chatApi.util.updateQueryData(
+            "getMessages",
+            {
+              conversationId:
+                message.conversationId,
+            },
+            (draft) => {
+              const index =
+                draft.data.findIndex(
+                  (m) => m.id === message.id
+                );
 
-    this.ws.onclose = () => {
-      console.warn("⚠️ Chat socket disconnected");
-    };
-
-    this.ws.onerror = (err) => {
-      console.error("❌ Chat socket error", err);
-    };
-
-    this.ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-
-        if (!data?.type) return;
-
-        this.emit(data.type, data.payload ?? data);
-      } catch (err) {
-        console.error("Invalid WS message", err);
+              if (index !== -1) {
+                draft.data[index] = message;
+              }
+            }
+          )
+        );
       }
-    };
-  }
+    );
 
-  /* =========================
-     SEND MESSAGE
-  ========================== */
-  send(type: string, payload: any) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    /**
+     * MESSAGE DELETED
+     */
+    this.socket.on(
+      "message.deleted",
+      ({
+        conversationId,
+        messageId,
+      }: {
+        conversationId: string;
+        messageId: string;
+      }) => {
+        store.dispatch(
+          chatApi.util.updateQueryData(
+            "getMessages",
+            {
+              conversationId,
+            },
+            (draft) => {
+              draft.data =
+                draft.data.filter(
+                  (m) => m.id !== messageId
+                );
+            }
+          )
+        );
+      }
+    );
 
-    this.ws.send(
-      JSON.stringify({
-        type,
-        payload,
-      })
+    /**
+     * READ RECEIPTS
+     */
+    this.socket.on(
+      "message.read",
+      (payload: ReadReceiptEvent) => {
+        store.dispatch(
+          chatApi.util.updateQueryData(
+            "getMessages",
+            {
+              conversationId:
+                payload.conversationId,
+            },
+            (draft) => {
+              const message =
+                draft.data.find(
+                  (m) =>
+                    m.id === payload.messageId
+                );
+
+              if (message) {
+                message.deliveryStatus =
+                  "READ";
+                message.readAt =
+                  new Date().toISOString();
+              }
+            }
+          )
+        );
+      }
+    );
+
+    /**
+     * TYPING
+     */
+    this.socket.on(
+      "typing.start",
+      (payload: TypingEvent) => {
+        this.emitTyping(payload, true);
+      }
+    );
+
+    this.socket.on(
+      "typing.stop",
+      (payload: TypingEvent) => {
+        this.emitTyping(payload, false);
+      }
+    );
+
+    /**
+     * STATUS CHANGED
+     */
+    this.socket.on(
+      "conversation.status",
+      (payload: StatusChangedEvent) => {
+        store.dispatch(
+          chatApi.util.invalidateTags([
+            {
+              type: "Conversation",
+              id: payload.conversationId,
+            },
+          ])
+        );
+      }
+    );
+
+    /**
+     * PRIORITY CHANGED
+     */
+    this.socket.on(
+      "conversation.priority",
+      (payload: PriorityChangedEvent) => {
+        store.dispatch(
+          chatApi.util.invalidateTags([
+            {
+              type: "Conversation",
+              id: payload.conversationId,
+            },
+          ])
+        );
+      }
     );
   }
 
-  /* =========================
-     SUBSCRIBE
-  ========================== */
-  on(event: string, callback: Function) {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-
-    this.listeners.get(event)!.add(callback);
-  }
-
-  /* =========================
-     UNSUBSCRIBE (IMPORTANT FIX)
-  ========================== */
-  off(event: string, callback: Function) {
-    const handlers = this.listeners.get(event);
-    if (!handlers) return;
-
-    handlers.delete(callback);
-
-    if (handlers.size === 0) {
-      this.listeners.delete(event);
-    }
-  }
-
-  /* =========================
-     EMIT EVENTS
-  ========================== */
-  private emit(event: string, data: any) {
-    const handlers = this.listeners.get(event);
-    if (!handlers) return;
-
-    handlers.forEach((cb) => {
-      try {
-        cb(data);
-      } catch (err) {
-        console.error("WS handler error:", err);
+  /**
+   * Room management
+   */
+  joinConversation(conversationId: string) {
+    this.socket?.emit(
+      "conversation.join",
+      {
+        conversationId,
       }
+    );
+  }
+
+  leaveConversation(conversationId: string) {
+    this.socket?.emit(
+      "conversation.leave",
+      {
+        conversationId,
+      }
+    );
+  }
+
+  /**
+   * Typing
+   */
+  startTyping(conversationId: string) {
+    this.socket?.emit("typing.start", {
+      conversationId,
     });
   }
 
-  /* =========================
-     DISCONNECT CLEANLY
-  ========================== */
-  disconnect() {
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
-
-    this.listeners.clear();
+  stopTyping(conversationId: string) {
+    this.socket?.emit("typing.stop", {
+      conversationId,
+    });
   }
 
-  /* =========================
-     RECONNECT (simple version)
-  ========================== */
-  reconnect() {
-    if (this.token) {
-      this.connect(this.token);
-    }
+  /**
+   * Read receipts
+   */
+  markRead(
+    conversationId: string,
+    messageId: string
+  ) {
+    this.socket?.emit("message.read", {
+      conversationId,
+      messageId,
+    });
   }
 }
 

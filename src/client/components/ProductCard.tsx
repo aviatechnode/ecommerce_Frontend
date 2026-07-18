@@ -96,14 +96,11 @@ export default function ProductCard({ product }: Props) {
     return "Price N/A";
   }, [firstVariant]);
 
-  // OEM display (safe extraction)
+  // OEM display – now shows only the first OEM number
   const oemDisplay = useMemo(() => {
     const cleaned = extractOemNumbers(product.oemNumbers);
     if (!cleaned.length) return null;
-
-    const visible = cleaned.slice(0, 2).join(", ");
-    const extra = cleaned.length > 2 ? ` +${cleaned.length - 2}` : "";
-    return visible + extra;
+    return cleaned[0]; // only the first one
   }, [product.oemNumbers]);
 
   // Stock status
@@ -158,7 +155,10 @@ export default function ProductCard({ product }: Props) {
         group relative flex flex-col
         overflow-hidden rounded-xl
         bg-white
-        transition-colors duration-200
+        border border-gray-100
+        shadow-sm
+        transition-all duration-200 ease-out
+        hover:shadow-lg hover:-translate-y-1
         cursor-pointer
       "
     >
@@ -171,8 +171,8 @@ export default function ProductCard({ product }: Props) {
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-gray-400">
-            <Package size={32} />
+          <div className="flex h-full items-center justify-center text-gray-300">
+            <Package size={36} />
           </div>
         )}
 
@@ -180,20 +180,23 @@ export default function ProductCard({ product }: Props) {
         <button
           onClick={handleWishlist}
           className={`
-            absolute top-2 right-2 rounded-full
-            bg-white p-1.5
-            transition-transform
+            absolute top-2 right-2
+            flex h-8 w-8 items-center justify-center rounded-full
+            bg-white/80 backdrop-blur-sm
+            shadow-sm
+            transition-all duration-200
+            hover:bg-white hover:scale-110 hover:shadow-md
             ${heartAnimating ? "scale-125" : "scale-100"}
           `}
         >
           <Bookmark
             size={16}
             className={`
-              transition-all duration-200
+              transition-colors duration-200
               ${
                 isWishlisted
                   ? "fill-amber-500 text-amber-500"
-                  : "text-gray-500 hover:text-amber-500"
+                  : "text-gray-600 hover:text-amber-500"
               }
             `}
           />
@@ -201,34 +204,34 @@ export default function ProductCard({ product }: Props) {
 
         {/* STOCK BADGES */}
         {!stockStatus.available && (
-          <div className="absolute top-2 left-2 rounded-md bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
+          <div className="absolute top-2 left-2 rounded-full bg-rose-500 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm">
             Out of Stock
           </div>
         )}
         {stockStatus.isLowStock && (
-          <div className="absolute top-2 left-2 rounded-md bg-orange-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
+          <div className="absolute top-2 left-2 rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm">
             Only {stockStatus.totalStock} left
           </div>
         )}
       </div>
 
       {/* CONTENT SECTION */}
-      <div className="flex flex-col gap-1.5 p-3">
+      <div className="flex flex-col gap-1.5 p-3.5">
         {/* PRODUCT TITLE */}
-        <h3 className="line-clamp-2 text-sm font-medium leading-tight text-gray-800 group-hover:text-emerald-700">
+        <h3 className="line-clamp-2 text-sm font-semibold leading-tight text-gray-800 group-hover:text-emerald-600 transition-colors">
           {product.name}
         </h3>
 
-        {/* OEM NUMBERS */}
+        {/* OEM NUMBER – now only the first one */}
         {oemDisplay && (
-          <p className="line-clamp-1 text-xs text-gray-500">
-            OEM: {oemDisplay}
+          <p className="line-clamp-1 text-xs text-gray-400">
+            OEM: <span className="font-mono text-gray-500">{oemDisplay}</span>
           </p>
         )}
 
         {/* PRICE & ADD TO CART ROW */}
         <div className="mt-1 flex items-center justify-between gap-2">
-          <span className="text-base font-bold text-emerald-700">
+          <span className="text-lg font-bold text-emerald-700">
             {displayPrice}
           </span>
 
@@ -236,21 +239,21 @@ export default function ProductCard({ product }: Props) {
             onClick={handleAddToCart}
             disabled={!variantId || adding || !stockStatus.available}
             className={`
-              flex items-center justify-center gap-1
-              rounded-lg px-3 py-1.5 text-xs font-medium
-              transition-colors active:scale-95
+              flex items-center justify-center gap-1.5
+              rounded-full px-4 py-1.5 text-xs font-medium
+              transition-all duration-200 active:scale-95
               ${
                 added
                   ? "bg-emerald-600 text-white"
                   : stockStatus.available
-                  ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                  ? "bg-gradient-to-r from-emerald-600 to-emerald-500 text-white hover:from-emerald-700 hover:to-emerald-600 shadow-sm"
                   : "cursor-not-allowed bg-gray-100 text-gray-400"
               }
             `}
           >
             {added ? (
               <>
-                <Check size={14} /> Added
+                <Check size={14} strokeWidth={2.5} /> Added
               </>
             ) : adding ? (
               <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />

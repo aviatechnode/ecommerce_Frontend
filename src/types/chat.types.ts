@@ -1,150 +1,266 @@
-export const ConversationStatus = {
-  OPEN: "OPEN",
-  PENDING: "PENDING",
-  RESOLVED: "RESOLVED",
-  CLOSED: "CLOSED",
-} as const;
+/* =========================================================
+ * ENUMS
+ * ======================================================= */
 
 export type ConversationStatus =
-  (typeof ConversationStatus)[keyof typeof ConversationStatus];
-
-export const ConversationPriority = {
-  LOW: "LOW",
-  NORMAL: "NORMAL",
-  HIGH: "HIGH",
-  URGENT: "URGENT",
-} as const;
+  | "OPEN"
+  | "PENDING"
+  | "WAITING_FOR_CUSTOMER"
+  | "WAITING_FOR_SUPPORT"
+  | "RESOLVED"
+  | "CLOSED";
 
 export type ConversationPriority =
-  (typeof ConversationPriority)[keyof typeof ConversationPriority];
-
-export const ConversationChannel = {
-  CHAT: "CHAT",
-  EMAIL: "EMAIL",
-  WHATSAPP: "WHATSAPP",
-} as const;
+  | "LOW"
+  | "NORMAL"
+  | "HIGH"
+  | "URGENT";
 
 export type ConversationChannel =
-  (typeof ConversationChannel)[keyof typeof ConversationChannel];
-
-export const ConversationRole = {
-  CUSTOMER: "CUSTOMER",
-  ADMIN: "ADMIN",
-  AGENT: "AGENT",
-} as const;
-
-export type ConversationRole =
-  (typeof ConversationRole)[keyof typeof ConversationRole];
-
-export const MessageType = {
-  TEXT: "TEXT",
-  IMAGE: "IMAGE",
-  FILE: "FILE",
-  SYSTEM: "SYSTEM",
-} as const;
+  | "WEB"
+  | "MOBILE"
+  | "EMAIL"
+  | "WHATSAPP"
+  | "PHONE";
 
 export type MessageType =
-  (typeof MessageType)[keyof typeof MessageType];
+  | "TEXT"
+  | "IMAGE"
+  | "FILE"
+  | "AUDIO"
+  | "VIDEO"
+  | "SYSTEM";
 
-///////////////////////////////////////////////////////////
-// USERS
-///////////////////////////////////////////////////////////
+export type MessageDeliveryStatus =
+  | "SENT"
+  | "DELIVERED"
+  | "READ";
 
-export interface User {
-  id: string;
-  name: string | null;
-  email: string;
+export type ConversationEventType =
+  | "CONVERSATION_CREATED"
+  | "CONVERSATION_ASSIGNED"
+  | "CONVERSATION_UNASSIGNED"
+  | "CONVERSATION_STATUS_CHANGED"
+  | "CONVERSATION_PRIORITY_CHANGED"
+  | "CONVERSATION_LOCKED"
+  | "CONVERSATION_UNLOCKED"
+  | "CONVERSATION_RESOLVED"
+  | "CONVERSATION_CLOSED"
+  | "CONVERSATION_REOPENED"
+  | "CONVERSATION_RATED"
+  | "TAG_ADDED"
+  | "TAG_REMOVED"
+  | "PARTICIPANT_ADDED"
+  | "PARTICIPANT_REMOVED"
+  | "MESSAGE_SENT"
+  | "MESSAGE_EDITED"
+  | "MESSAGE_DELETED"
+  | "MESSAGE_READ"
+  | "ATTACHMENT_ADDED"
+  | "INTERNAL_NOTE_CREATED";
+
+/* =========================================================
+ * COMMON API RESPONSE
+ * ======================================================= */
+
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
 }
 
-///////////////////////////////////////////////////////////
-// ATTACHMENTS
-///////////////////////////////////////////////////////////
+/* =========================================================
+ * USER
+ * ======================================================= */
+
+export interface ChatUser {
+  id: string;
+  name?: string;
+  email?: string;
+  avatar?: string;
+  roleName?: string;
+}
+
+/* =========================================================
+ * ATTACHMENTS
+ * ======================================================= */
 
 export interface MessageAttachment {
   id: string;
+
+  messageId: string;
+
   url: string;
+
   filename: string;
+
   mimeType: string;
-  extension: string | null;
+
+  extension?: string | null;
+
   size: number;
+
+  uploadedById?: string | null;
+
+  createdAt: string;
 }
 
-///////////////////////////////////////////////////////////
-// MESSAGE
-///////////////////////////////////////////////////////////
+/* =========================================================
+ * MESSAGE
+ * ======================================================= */
 
 export interface Message {
   id: string;
+
   conversationId: string;
-  senderId: string;
+
+  senderId?: string | null;
+
+  sender?: ChatUser | null;
 
   type: MessageType;
 
-  content: string | null;
+  content?: string | null;
 
-  replyToId: string | null;
+  replyToId?: string | null;
+
+  replyTo?: Message | null;
+
+  orderId?: string | null;
+
+  shipmentId?: string | null;
+
+  returnRequestId?: string |null;
+
+  deliveryStatus: MessageDeliveryStatus;
+
+  deliveredAt?: string | null;
+
+  readAt?: string | null;
 
   isInternal: boolean;
+
   isEdited: boolean;
 
-  deletedAt: string | null;
+  deletedAt?: string | null;
 
   attachments: MessageAttachment[];
 
-  sender: User | null;
-
-  replyTo?: {
-    id: string;
-    content: string | null;
-    sender: {
-      name: string | null;
-    };
-  } | null;
-
-  reads: {
-    readAt: string;
-  }[];
-
   createdAt: string;
+
   updatedAt: string;
 }
 
-///////////////////////////////////////////////////////////
-// PARTICIPANTS
-///////////////////////////////////////////////////////////
+/* =========================================================
+ * PARTICIPANTS
+ * ======================================================= */
 
 export interface ConversationParticipant {
   id: string;
 
+  conversationId: string;
+
   userId: string;
 
-  roleInConversation: ConversationRole;
+  user?: ChatUser;
 
   unreadCount: number;
 
   isMuted: boolean;
 
-  user: User;
+  lastReadMessageId?: string | null;
+
+  joinedAt: string;
 }
 
-///////////////////////////////////////////////////////////
-// CONVERSATION
-///////////////////////////////////////////////////////////
+/* =========================================================
+ * TAGS
+ * ======================================================= */
+
+export interface ConversationTag {
+  id: string;
+
+  name: string;
+
+  color?: string | null;
+
+  createdAt: string;
+}
+
+export interface ConversationTagPivot {
+  id: string;
+
+  conversationId: string;
+
+  tagId: string;
+
+  tag?: ConversationTag;
+}
+
+/* =========================================================
+ * SLA
+ * ======================================================= */
+
+export interface ConversationSLA {
+  id: string;
+
+  conversationId: string;
+
+  firstResponseDueAt?: string | null;
+
+  resolutionDueAt?: string | null;
+
+  firstRespondedAt?: string | null;
+
+  resolvedAt?: string | null;
+
+  breachedFirstResponse: boolean;
+
+  breachedResolution: boolean;
+
+  createdAt: string;
+
+  updatedAt: string;
+}
+
+/* =========================================================
+ * EVENTS
+ * ======================================================= */
+
+export interface ConversationEvent {
+  id: string;
+
+  conversationId: string;
+
+  actorId?: string | null;
+
+  type: ConversationEventType;
+
+  description?: string | null;
+
+  metadata?: unknown;
+
+  createdAt: string;
+}
+
+/* =========================================================
+ * CONVERSATION
+ * ======================================================= */
 
 export interface Conversation {
   id: string;
 
-  customerId: string | null;
+  customerId?: string | null;
 
-  assignedAdminId: string | null;
+  assignedUserId?: string | null;
 
-  orderId: string | null;
+  orderId?: string | null;
 
-  shipmentId: string | null;
+  productId?: string | null;
 
-  returnRequestId: string | null;
+  vehicleId?: string | null;
 
-  subject: string | null;
+  subject?: string | null;
 
   status: ConversationStatus;
 
@@ -152,35 +268,216 @@ export interface Conversation {
 
   channel: ConversationChannel;
 
+  firstResponseAt?: string | null;
+
+  resolvedAt?: string | null;
+
+  closedAt?: string | null;
+
+  customerRating?: number | null;
+
+  customerFeedback?: string | null;
+
+  lastMessageId?: string | null;
+
+  lastMessage?: string | null;
+
+  lastMessageAt?: string | null;
+
+  lastMessageById?: string | null;
+
   isLocked: boolean;
-
-  lastMessage: string | null;
-
-  lastMessageAt: string | null;
 
   createdAt: string;
 
   updatedAt: string;
 
-  resolvedAt: string | null;
+  messages?: Message[];
 
-  closedAt: string | null;
+  participants?: ConversationParticipant[];
 
-  customer: User | null;
+  tags?: ConversationTagPivot[];
 
-  assignedAdmin: User | null;
+  sla?: ConversationSLA | null;
 
-  participants: ConversationParticipant[];
+  events?: ConversationEvent[];
+}
 
-  tags: {
-    tag: {
-      id: string;
-      name: string;
-      color: string | null;
-    };
-  }[];
+/* =========================================================
+ * DTOs
+ * ======================================================= */
 
-  unreadCount: number;
+export interface CreateConversationPayload {
+  customerId?: string;
+
+  assignedUserId?: string;
+
+  orderId?: string;
+
+  productId?: string;
+
+  vehicleId?: string;
+
+  subject?: string;
+
+  status?: ConversationStatus;
+
+  priority?: ConversationPriority;
+
+  channel?: ConversationChannel;
+
+  isLocked?: boolean;
+}
+
+export interface CreateFitmentConversationPayload {
+  customerId: string;
+
+  productId: string;
+
+  vehicleId: string;
+
+  subject: string;
+
+  initialMessage: string;
+}
+
+export interface SendMessagePayload {
+  conversationId: string;
+  
+  type?: MessageType;
+
+  content?: string;
+
+  replyToId?: string;
+
+  orderId?: string;
+
+  shipmentId?: string;
+
+  returnRequestId?: string;
+
+  isInternal?: boolean;
+
+  attachments?: File[];
+}
+export interface EditMessagePayload {
+  messageId: string;
+
+  content: string;
+}
+
+export interface DeleteMessagePayload {
+  messageId: string;
+}
+
+export interface AssignConversationPayload {
+  conversationId: string;
+
+  assignedUserId: string;
+}
+
+export interface ChangeConversationStatusPayload {
+  conversationId: string;
+
+  status: ConversationStatus;
+}
+
+export interface ChangeConversationPriorityPayload {
+  conversationId: string;
+
+  priority: ConversationPriority;
+}
+
+export interface AddParticipantPayload {
+  conversationId: string;
+
+  userId: string;
+}
+
+export interface RemoveParticipantPayload {
+  conversationId: string;
+
+  userId: string;
+}
+
+export interface MuteParticipantPayload {
+  conversationId: string;
+
+  userId: string;
 
   isMuted: boolean;
+}
+
+export interface AddTagPayload {
+  conversationId: string;
+
+  tagId: string;
+}
+
+export interface RemoveTagPayload {
+  conversationId: string;
+
+  tagId: string;
+}
+
+/* =========================================================
+ * API RESPONSES
+ * ======================================================= */
+
+export type ConversationResponse =
+  ApiResponse<Conversation>;
+
+export type MessageResponse =
+  ApiResponse<Message>;
+
+export type ConversationsResponse =
+  ApiResponse<Conversation[]>;
+
+export type MessagesResponse =
+  ApiResponse<Message[]>;
+
+/* =========================================================
+ * SOCKET EVENTS
+ * ======================================================= */
+
+export interface TypingEvent {
+  conversationId: string;
+
+  userId: string;
+}
+
+export interface ReadReceiptEvent {
+  conversationId: string;
+
+  messageId: string;
+
+  userId: string;
+}
+
+export interface StatusChangedEvent {
+  conversationId: string;
+
+  status: ConversationStatus;
+}
+
+export interface PriorityChangedEvent {
+  conversationId: string;
+
+  priority: ConversationPriority;
+}
+
+export interface ChatState {
+  connected: boolean;
+
+  activeConversationId: string | null;
+
+  typingUsers: string[];
+
+  unreadCounts: Record<string, number>;
+
+  pendingMessages: Message[];
+
+  socketMessages: Record<string, Message[]>;
+
+  onlineUsers: string[];
 }
